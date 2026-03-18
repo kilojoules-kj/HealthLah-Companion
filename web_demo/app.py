@@ -71,6 +71,95 @@ async def patient_responds(patient_id: str, audio: UploadFile = File(...)):
     return response
 
 
+# ── Risk Assessment Chat ──────────────────────────
+
+# In-memory conversation state per session (simplified for hackathon)
+risk_sessions: dict[str, list[dict]] = {}
+
+RISK_SYSTEM_PROMPT = """You are Kawan, a warm and professional health screening assistant
+in Singapore. You help people understand if they might be at risk for chronic conditions
+like Type 2 Diabetes, Hypertension, Cardiovascular Disease, Chronic Kidney Disease,
+or Hyperlipidaemia.
+
+Ask questions conversationally — one or two at a time — about:
+- Age, gender, ethnicity
+- Family history of chronic illness
+- Lifestyle: diet, exercise, smoking, alcohol
+- Known symptoms: frequent urination, fatigue, headaches, blurry vision, numbness
+- Recent health checks: blood pressure, blood sugar, cholesterol levels
+- BMI / weight concerns
+
+After gathering enough information (usually 4-6 exchanges), provide a summary of
+risk factors you've identified. Be clear this is NOT a diagnosis.
+
+If the person speaks Mandarin, Malay, Tamil, or Singlish, respond in their language.
+
+Keep responses SHORT (2-3 sentences) since this is a voice conversation.
+
+At the end of your message, add a line starting with [RISK_FACTORS] containing a
+JSON array of detected risk factors, e.g.:
+[RISK_FACTORS] [{"text": "Family history of diabetes", "level": "high"}, {"text": "Sedentary lifestyle", "level": "medium"}]
+If no risk factors detected yet, omit this line."""
+
+
+@app.post("/api/risk-chat")
+async def risk_chat(audio: UploadFile = File(...)):
+    """Risk assessment voice chat — transcribe + respond."""
+    import json as _json
+
+    audio_path = f"data/uploads/{uuid.uuid4().hex}.wav"
+    with open(audio_path, "wb") as f:
+        shutil.copyfileobj(audio.file, f)
+
+    # Use a simple session key (single user for hackathon demo)
+    session_id = "default"
+    if session_id not in risk_sessions:
+        risk_sessions[session_id] = []
+
+    history = risk_sessions[session_id]
+
+    # Transcribe the audio
+    transcription = meralion.transcribe_only(audio_path)
+
+    # Add to history
+    history.append({"role": "user", "content": transcription})
+
+    # Build instruction with conversation context
+    history_text = "\n".join(
+        f"{'User' if h['role'] == 'user' else 'Kawan'}: {h['content']}"
+        for h in history[-10:]
+    )
+
+    instruction = f"""{RISK_SYSTEM_PROMPT}
+
+Conversation so far:
+{history_text}
+
+Respond to the user's latest message. Remember to keep it short and conversational."""
+
+    # Get response (text-only, no audio needed for this call)
+    response_text = meralion.process_with_instruction(audio_path, instruction)
+
+    # Parse out risk factors if present
+    risk_factors = []
+    clean_response = response_text
+    if "[RISK_FACTORS]" in response_text:
+        parts = response_text.split("[RISK_FACTORS]")
+        clean_response = parts[0].strip()
+        try:
+            risk_factors = _json.loads(parts[1].strip())
+        except (ValueError, IndexError):
+            pass
+
+    history.append({"role": "assistant", "content": clean_response})
+
+    return {
+        "transcription": transcription,
+        "response": clean_response,
+        "risk_factors": risk_factors,
+    }
+
+
 @app.get("/api/audio/{filename}")
 async def get_audio(filename: str):
     return FileResponse(f"data/tts_output/{filename}")
