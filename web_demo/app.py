@@ -33,42 +33,66 @@ async def home():
 @app.post("/api/start-call/{patient_id}")
 async def start_call(patient_id: str):
     """Initiate a proactive check-in call."""
-    patient = load_patient(patient_id)
-    result = conv_manager.start_call(patient)
-    return {
-        "message": result["text"],
-        "audio_url": f"/api/audio/{os.path.basename(result['audio_path'])}",
-        "phase": result["phase"],
-    }
+    try:
+        patient = load_patient(patient_id)
+        result = conv_manager.start_call(patient)
+        audio_url = None
+        if result.get("audio_path") and os.path.exists(result["audio_path"]):
+            audio_url = f"/api/audio/{os.path.basename(result['audio_path'])}"
+        return {
+            "message": result["text"],
+            "audio_url": audio_url,
+            "phase": result["phase"],
+        }
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return {"message": f"Error starting call: {e}", "audio_url": None, "phase": "error"}
 
 
 @app.post("/api/respond/{patient_id}")
 async def patient_responds(patient_id: str, audio: UploadFile = File(...)):
     """Patient speaks — process their audio through MERaLiON."""
-    # Save uploaded audio
-    audio_path = f"data/uploads/{uuid.uuid4().hex}.wav"
-    with open(audio_path, "wb") as f:
-        shutil.copyfileobj(audio.file, f)
+    try:
+        # Save uploaded audio
+        audio_path = f"data/uploads/{uuid.uuid4().hex}.wav"
+        with open(audio_path, "wb") as f:
+            shutil.copyfileobj(audio.file, f)
 
-    # Process through conversation manager → MERaLiON
-    result = conv_manager.process_patient_response(patient_id, audio_path)
+        # Process through conversation manager → MERaLiON
+        result = conv_manager.process_patient_response(patient_id, audio_path)
 
-    response = {
-        "ai_message": result["text"],
-        "audio_url": f"/api/audio/{os.path.basename(result['audio_path'])}",
-        "phase": result["phase"],
-        "patient_said": result.get("transcription", ""),
-        "mood": result.get("mood", ""),
-        "health_flags": result.get("health_flags", []),
-    }
+        audio_url = None
+        if result.get("audio_path") and os.path.exists(result["audio_path"]):
+            audio_url = f"/api/audio/{os.path.basename(result['audio_path'])}"
 
-    if result.get("call_summary"):
-        response["call_summary"] = result["call_summary"]
+        response = {
+            "ai_message": result["text"],
+            "audio_url": audio_url,
+            "phase": result["phase"],
+            "patient_said": result.get("transcription", ""),
+            "mood": result.get("mood", ""),
+            "health_flags": result.get("health_flags", []),
+        }
 
-    if result.get("emergency"):
-        response["emergency"] = True
+        if result.get("call_summary"):
+            response["call_summary"] = result["call_summary"]
 
-    return response
+        if result.get("emergency"):
+            response["emergency"] = True
+
+        return response
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return {
+            "ai_message": f"Sorry, I had trouble processing that. Please try again.",
+            "audio_url": None,
+            "phase": "error",
+            "patient_said": "(audio could not be processed)",
+            "mood": "",
+            "health_flags": [],
+        }
 
 
 # ── Risk Assessment Chat ──────────────────────────
@@ -107,57 +131,66 @@ async def risk_chat(audio: UploadFile = File(...)):
     """Risk assessment voice chat — transcribe + respond."""
     import json as _json
 
-    audio_path = f"data/uploads/{uuid.uuid4().hex}.wav"
-    with open(audio_path, "wb") as f:
-        shutil.copyfileobj(audio.file, f)
+    try:
+        audio_path = f"data/uploads/{uuid.uuid4().hex}.wav"
+        with open(audio_path, "wb") as f:
+            shutil.copyfileobj(audio.file, f)
 
-    # Use a simple session key (single user for hackathon demo)
-    session_id = "default"
-    if session_id not in risk_sessions:
-        risk_sessions[session_id] = []
+        # Use a simple session key (single user for hackathon demo)
+        session_id = "default"
+        if session_id not in risk_sessions:
+            risk_sessions[session_id] = []
 
-    history = risk_sessions[session_id]
+        history = risk_sessions[session_id]
 
-    # Transcribe the audio
-    transcription = meralion.transcribe_only(audio_path)
+        # Transcribe the audio
+        transcription = meralion.transcribe_only(audio_path)
 
-    # Add to history
-    history.append({"role": "user", "content": transcription})
+        # Add to history
+        history.append({"role": "user", "content": transcription})
 
-    # Build instruction with conversation context
-    history_text = "\n".join(
-        f"{'User' if h['role'] == 'user' else 'Kawan'}: {h['content']}"
-        for h in history[-10:]
-    )
+        # Build instruction with conversation context
+        history_text = "\n".join(
+            f"{'User' if h['role'] == 'user' else 'Kawan'}: {h['content']}"
+            for h in history[-10:]
+        )
 
-    instruction = f"""{RISK_SYSTEM_PROMPT}
+        instruction = f"""{RISK_SYSTEM_PROMPT}
 
 Conversation so far:
 {history_text}
 
 Respond to the user's latest message. Remember to keep it short and conversational."""
 
-    # Get response (text-only, no audio needed for this call)
-    response_text = meralion.process_with_instruction(audio_path, instruction)
+        # Get response (text-only, no audio needed for this call)
+        response_text = meralion.process_with_instruction(audio_path, instruction)
 
-    # Parse out risk factors if present
-    risk_factors = []
-    clean_response = response_text
-    if "[RISK_FACTORS]" in response_text:
-        parts = response_text.split("[RISK_FACTORS]")
-        clean_response = parts[0].strip()
-        try:
-            risk_factors = _json.loads(parts[1].strip())
-        except (ValueError, IndexError):
-            pass
+        # Parse out risk factors if present
+        risk_factors = []
+        clean_response = response_text
+        if "[RISK_FACTORS]" in response_text:
+            parts = response_text.split("[RISK_FACTORS]")
+            clean_response = parts[0].strip()
+            try:
+                risk_factors = _json.loads(parts[1].strip())
+            except (ValueError, IndexError):
+                pass
 
-    history.append({"role": "assistant", "content": clean_response})
+        history.append({"role": "assistant", "content": clean_response})
 
-    return {
-        "transcription": transcription,
-        "response": clean_response,
-        "risk_factors": risk_factors,
-    }
+        return {
+            "transcription": transcription,
+            "response": clean_response,
+            "risk_factors": risk_factors,
+        }
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return {
+            "transcription": "(audio could not be processed)",
+            "response": f"Sorry, I had trouble processing that. Please try again.",
+            "risk_factors": [],
+        }
 
 
 @app.get("/api/audio/{filename}")

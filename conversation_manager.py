@@ -321,8 +321,11 @@ Pay special attention to VOICE TONE — sadness, flatness, or withdrawal.""",
         )
 
         # Trigger escalation (covered in escalation module)
-        from escalation import trigger_emergency
-        trigger_emergency(state.patient, result)
+        try:
+            from escalation import trigger_emergency
+            trigger_emergency(state.patient, result)
+        except ImportError:
+            logger.warning("Escalation module not found — emergency alert not sent")
 
         return {
             "text": emergency_response,
