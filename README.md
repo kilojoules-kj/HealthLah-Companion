@@ -70,7 +70,7 @@ patients — not the other way around.
 ## 🚀 Quick Start
 
 ```bash
-git clone https://github.com/your-team/healthlah-companion
+git clone https://github.com/kilojoules-kj/HealthLah-Companion.git
 cd healthlah-companion
 pip install -r requirements.txt
 python main.py
