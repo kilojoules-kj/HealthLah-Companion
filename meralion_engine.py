@@ -1,278 +1,183 @@
-"""
-meralion_engine.py — MERaLiON-Powered Multilingual Vocal Biomarker Caretaker Engine
-=====================================================================================
-
-Hackathon Theme: "Empower Patients, Enable Community, Elevate Healthcare"
-
-Architecture
-────────────
-  Daily Proactive Call (Audio)
-         │
-         ▼
-  ┌─────────────────────────────┐
-  │   MERaLiON AudioLLM         │
-  │   (audio → understanding    │
-  │          → response)        │
-  └──────┬──────┬──────┬────────┘
-         │      │      │
-         ▼      ▼      ▼
-   Content   Vocal   Emotional
-   Analysis  Bio-    Tone
-             marker  Analysis
-         │      │      │
-         ▼      ▼      ▼
-  ┌─────────────────────────────┐
-  │   Health Risk Assessor       │
-  │   + Alert System             │
-  │   + Trending / Longitudinal  │
-  └─────────────────────────────┘
-         │
-         ▼
-  Caregiver Dashboard / Alerts
-
-Supports: English, Mandarin, Malay, Tamil, and other SEA languages
-Target:   Mr. Tan (60s, multi-chronic), caregivers, pre-conditioned individuals
-"""
-
-from __future__ import annotations
-
-import io
-import json
-import logging
-import time
-import uuid
-import warnings
-from dataclasses import dataclass, field, asdict
-from datetime import datetime, timedelta
-from enum import Enum
-from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple, Union
-
-import numpy as np
+# meralion_engine.py
 import torch
+import librosa
+import numpy as np
+from transformers import AutoModelForCausalLM, AutoProcessor
+from typing import Optional
+import logging
 
-# ──────────────────────────────────────────────
-# Optional heavy imports — guarded for CI / demo
-# ──────────────────────────────────────────────
-try:
-    import librosa
-    HAS_LIBROSA = True
-except ImportError:
-    HAS_LIBROSA = False
-    warnings.warn("librosa not installed – vocal biomarker extraction will use fallback stubs.")
-
-try:
-    import parselmouth          # Praat bindings for clinical voice analysis
-    from parselmouth.praat import call as praat_call
-    HAS_PARSELMOUTH = True
-except ImportError:
-    HAS_PARSELMOUTH = False
-    warnings.warn("parselmouth not installed – jitter/shimmer analysis unavailable.")
-
-try:
-    from transformers import (
-        AutoModelForCausalLM,
-        AutoTokenizer,
-        AutoProcessor,
-        WhisperFeatureExtractor,
-    )
-    HAS_TRANSFORMERS = True
-except ImportError:
-    HAS_TRANSFORMERS = False
-    warnings.warn("transformers not installed – MERaLiON model will run in mock mode.")
+logger = logging.getLogger(__name__)
 
 
-logger = logging.getLogger("VocalBiomarkerCaretaker")
-logger.setLevel(logging.INFO)
-if not logger.handlers:
-    _ch = logging.StreamHandler()
-    _ch.setFormatter(logging.Formatter("[%(asctime)s] %(name)s %(levelname)s: %(message)s"))
-    logger.addHandler(_ch)
+class MERaLiONEngine:
+    """
+    Wraps MERaLiON AudioLLM for:
+    1. Understanding patient speech (audio → meaning)
+    2. Generating contextual responses
+    3. Extracting paralinguistic cues from audio
+    """
+
+    def __init__(self, model_id: str = "MERaLiON/MERaLiON-AudioLLM-Whisper-SEA-LION"):
+        logger.info(f"Loading MERaLiON model: {model_id}")
+        self.processor = AutoProcessor.from_pretrained(
+            model_id, trust_remote_code=True
+        )
+        self.model = AutoModelForCausalLM.from_pretrained(
+            model_id,
+            trust_remote_code=True,
+            torch_dtype=torch.float16,
+            device_map="auto",
+        )
+        self.model.eval()
+        logger.info("MERaLiON loaded successfully")
+
+    def process_audio_turn(
+        self,
+        audio_path: str,
+        system_prompt: str,
+        conversation_history: list[dict],
+        current_phase_instruction: str,
+    ) -> dict:
+        """
+        Process one turn of conversation.
+
+        Takes the patient's audio response and returns:
+        - transcription: what they said
+        - understanding: structured interpretation
+        - response: what the AI should say next
+        - flags: any health concerns detected
+        """
+
+        # Load audio at 16kHz (MERaLiON expects this)
+        audio, sr = librosa.load(audio_path, sr=16000)
+
+        # Build the prompt that tells MERaLiON what to do with this audio
+        analysis_prompt = self._build_analysis_prompt(
+            system_prompt, conversation_history, current_phase_instruction
+        )
+
+        # Process through MERaLiON
+        # The audio is passed directly — MERaLiON's Whisper encoder handles it
+        conversation = [
+            {"role": "system", "content": system_prompt},
+            *conversation_history,
+            {
+                "role": "user",
+                "content": [
+                    {"type": "audio", "audio_url": audio_path},
+                    {"type": "text", "text": current_phase_instruction},
+                ],
+            },
+        ]
+
+        inputs = self.processor(
+            text=self.processor.apply_chat_template(
+                conversation, tokenize=False, add_generation_prompt=True
+            ),
+            audios=[audio],
+            return_tensors="pt",
+            sampling_rate=16000,
+        )
+        inputs = {k: v.to(self.model.device) for k, v in inputs.items()}
+
+        with torch.no_grad():
+            output_ids = self.model.generate(
+                **inputs,
+                max_new_tokens=512,
+                temperature=0.7,
+                do_sample=True,
+                top_p=0.9,
+            )
+
+        # Decode only the new tokens
+        new_tokens = output_ids[0][inputs["input_ids"].shape[1]:]
+        raw_response = self.processor.decode(new_tokens, skip_special_tokens=True)
+
+        # Parse the structured response
+        return self._parse_response(raw_response)
+
+    def _build_analysis_prompt(
+        self, system_prompt: str, history: list, phase_instruction: str
+    ) -> str:
+        """Build the instruction for MERaLiON to analyze patient audio"""
+        return phase_instruction
+
+    def _parse_response(self, raw: str) -> dict:
+        """
+        Parse MERaLiON's structured output.
+        We prompt it to return in a specific format.
+        """
+        result = {
+            "transcription": "",
+            "language_detected": "",
+            "response_to_patient": "",
+            "health_flags": [],
+            "mood_assessment": "",
+            "adherence_status": "",
+            "raw_output": raw,
+        }
+
+        # Parse sections from the structured output
+        current_section = None
+        for line in raw.strip().split("\n"):
+            line = line.strip()
+            if line.startswith("[TRANSCRIPTION]"):
+                current_section = "transcription"
+                result["transcription"] = line.replace("[TRANSCRIPTION]", "").strip()
+            elif line.startswith("[LANGUAGE]"):
+                result["language_detected"] = line.replace("[LANGUAGE]", "").strip()
+            elif line.startswith("[RESPONSE]"):
+                current_section = "response"
+                result["response_to_patient"] = line.replace("[RESPONSE]", "").strip()
+            elif line.startswith("[FLAGS]"):
+                flags = line.replace("[FLAGS]", "").strip()
+                result["health_flags"] = [f.strip() for f in flags.split(",") if f.strip() and f.strip().lower() != "none"]
+            elif line.startswith("[MOOD]"):
+                result["mood_assessment"] = line.replace("[MOOD]", "").strip()
+            elif line.startswith("[ADHERENCE]"):
+                result["adherence_status"] = line.replace("[ADHERENCE]", "").strip()
+            elif current_section == "response":
+                result["response_to_patient"] += " " + line
+            elif current_section == "transcription":
+                result["transcription"] += " " + line
+
+        # Fallback if parsing fails — use raw output as response
+        if not result["response_to_patient"]:
+            result["response_to_patient"] = raw.strip()
+
+        return result
 
 
-# ═══════════════════════════════════════════════
-# 1.  CONFIGURATION
-# ═══════════════════════════════════════════════
+class MERaLiONEngineAPI:
+    """
+    Alternative: If hackathon provides a hosted MERaLiON API endpoint
+    instead of running the model locally.
+    """
 
-@dataclass
-class EngineConfig:
-    """Central configuration — tweak per deployment / demo."""
+    def __init__(self, api_url: str, api_key: str):
+        self.api_url = api_url
+        self.api_key = api_key
 
-    # ── MERaLiON model ──────────────────────────
-    model_id: str = "aisingapore/MERaLiON-AudioLLM-Whisper-SEA-LION-instruct"
-    device: str = "cuda" if torch.cuda.is_available() else "cpu"
-    torch_dtype: str = "float16" if torch.cuda.is_available() else "float32"
-    max_new_tokens: int = 512
-    temperature: float = 0.3          # low = more deterministic health answers
-    trust_remote_code: bool = True
+    def process_audio_turn(self, audio_path, system_prompt,
+                           conversation_history, current_phase_instruction) -> dict:
+        import requests
+        import base64
 
-    # ── Audio ───────────────────────────────────
-    target_sr: int = 16_000           # MERaLiON / Whisper expects 16 kHz
-    max_audio_duration_s: float = 120.0
-    min_audio_duration_s: float = 1.0
+        with open(audio_path, "rb") as f:
+            audio_b64 = base64.b64encode(f.read()).decode()
 
-    # ── Vocal biomarker thresholds ──────────────
-    # Reference ranges (population norms); flag if outside
-    pitch_mean_low_hz: float = 75.0
-    pitch_mean_high_hz: float = 300.0
-    jitter_warn_pct: float = 1.04     # >1.04 % → potential laryngeal / neuro issue
-    shimmer_warn_pct: float = 3.81
-    hnr_warn_db: float = 20.0        # < 20 dB → breathy / hoarse
-    speech_rate_low_wpm: int = 100    # < 100 → cognitive / motor slowdown
-    speech_rate_high_wpm: int = 200
-    pause_ratio_warn: float = 0.40    # > 40 % silence → fatigue / confusion
+        payload = {
+            "audio": audio_b64,
+            "system_prompt": system_prompt,
+            "conversation_history": conversation_history,
+            "instruction": current_phase_instruction,
+        }
 
-    # ── Emotional thresholds ────────────────────
-    depression_valence_floor: float = 0.25
-    anxiety_arousal_ceil: float = 0.85
-    distress_score_ceil: float = 0.70
-
-    # ── Longitudinal trending ───────────────────
-    trend_window_days: int = 14
-    significant_change_pct: float = 15.0   # % change triggering alert
-
-    # ── Alert priorities ────────────────────────
-    alert_cooldown_hours: int = 4     # suppress duplicate alerts within window
-
-
-# ═══════════════════════════════════════════════
-# 2.  DATA MODELS
-# ═══════════════════════════════════════════════
-
-class AlertSeverity(str, Enum):
-    INFO = "info"
-    LOW = "low"
-    MEDIUM = "medium"
-    HIGH = "high"
-    CRITICAL = "critical"
-
-
-class HealthDomain(str, Enum):
-    MEDICATION = "medication_adherence"
-    SYMPTOMS = "symptom_report"
-    COGNITIVE = "cognitive_function"
-    RESPIRATORY = "respiratory"
-    CARDIOVASCULAR = "cardiovascular"
-    NEUROLOGICAL = "neurological"
-    MENTAL_HEALTH = "mental_health"
-    MOBILITY = "mobility"
-    NUTRITION = "nutrition"
-    SLEEP = "sleep"
-    SOCIAL = "social_engagement"
-    APPOINTMENT = "appointment_awareness"
-
-
-@dataclass
-class VocalBiomarkers:
-    """Acoustic measurements extracted directly from the audio signal."""
-
-    # Pitch / F0
-    pitch_mean_hz: float = 0.0
-    pitch_std_hz: float = 0.0
-    pitch_range_hz: float = 0.0
-    pitch_slope: float = 0.0          # declining pitch over utterance
-
-    # Perturbation (voice quality)
-    jitter_local_pct: float = 0.0     # cycle-to-cycle frequency variation
-    shimmer_local_pct: float = 0.0    # cycle-to-cycle amplitude variation
-    hnr_db: float = 0.0              # harmonics-to-noise ratio
-
-    # Temporal
-    speech_rate_wpm: float = 0.0
-    articulation_rate_wpm: float = 0.0   # excludes pauses
-    pause_ratio: float = 0.0            # fraction of audio that is silence
-    mean_pause_duration_s: float = 0.0
-    longest_pause_s: float = 0.0
-    num_pauses: int = 0
-
-    # Energy / loudness
-    energy_mean_db: float = 0.0
-    energy_std_db: float = 0.0
-    energy_trend: float = 0.0         # declining energy → fatigue
-
-    # Spectral
-    spectral_centroid_hz: float = 0.0
-    mfcc_means: List[float] = field(default_factory=list)
-
-    # Meta
-    audio_duration_s: float = 0.0
-    extraction_time_ms: float = 0.0
-
-    def to_dict(self) -> Dict[str, Any]:
-        return asdict(self)
-
-
-@dataclass
-class EmotionalProfile:
-    """Emotional state inferred from vocal + content cues."""
-
-    valence: float = 0.5           # 0 = very negative … 1 = very positive
-    arousal: float = 0.5           # 0 = very calm … 1 = very agitated
-    dominance: float = 0.5         # 0 = submissive … 1 = dominant
-
-    primary_emotion: str = "neutral"
-    emotion_confidence: float = 0.0
-    secondary_emotion: Optional[str] = None
-
-    # Clinical flags
-    depression_indicators: float = 0.0    # 0–1
-    anxiety_indicators: float = 0.0       # 0–1
-    confusion_indicators: float = 0.0     # 0–1
-    distress_level: float = 0.0           # 0–1
-
-    # From MERaLiON understanding
-    expressed_feelings: List[str] = field(default_factory=list)
-    llm_emotion_summary: str = ""
-
-    def to_dict(self) -> Dict[str, Any]:
-        return asdict(self)
-
-
-@dataclass
-class ContentInsights:
-    """Structured health content extracted from patient speech via MERaLiON."""
-
-    # Raw transcript
-    transcript: str = ""
-    detected_language: str = "en"
-
-    # Medication
-    medication_mentioned: List[str] = field(default_factory=list)
-    medication_adherence_score: float = -1.0   # 0–1, -1 = not discussed
-    missed_doses_reported: int = 0
-    side_effects_mentioned: List[str] = field(default_factory=list)
-
-    # Symptoms
-    symptoms_reported: List[Dict[str, Any]] = field(default_factory=list)
-    # Each: {"symptom": str, "severity": 1-10, "duration": str, "new": bool}
-    pain_level: int = -1               # 0–10 scale, -1 = not mentioned
-
-    # Vitals (self-reported)
-    self_reported_vitals: Dict[str, Any] = field(default_factory=dict)
-    # e.g. {"blood_pressure": "140/90", "blood_sugar": "180 mg/dL"}
-
-    # Lifestyle
-    sleep_quality: float = -1.0        # 0–1, -1 = not discussed
-    appetite_change: Optional[str] = None   # "increased", "decreased", "normal", None
-    activity_level: Optional[str] = None    # "sedentary", "light", "moderate", "active"
-    fluid_intake: Optional[str] = None
-
-    # Cognitive
-    cognitive_clarity_score: float = -1.0    # 0–1 from response coherence
-    confusion_events: List[str] = field(default_factory=list)
-
-    # Social
-    social_isolation_risk: float = 0.0
-    caregiver_mentioned: bool = False
-    family_contact_recent: bool = False
-
-    # Appointments
-    appointment_awareness: bool = False
-    next_appointment_mentioned: Optional[str] = None
-
-    # Follow-up topics the patient raised
-    patient_questions: List[str] = field(default_factory=list)
-
-    # Full LLM analysis
-    llm_content_summary: str = ""
-    llm_health_concerns: List[str] = 
+        resp = requests.post(
+            f"{self.api_url}/v1/audio/chat",
+            json=payload,
+            headers={"Authorization": f"Bearer {self.api_key}"},
+            timeout=30,
+        )
+        resp.raise_for_status()
+        return self._parse_response(resp.json()["content"])
