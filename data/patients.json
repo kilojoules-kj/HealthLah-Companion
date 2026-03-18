@@ -1,0 +1,53 @@
+{
+  "patient_001": {
+    "name": "Tan Ah Kow",
+    "preferred_name": "Mr. Tan",
+    "age": 67,
+    "preferred_language": "mandarin",
+    "conditions": ["Type 2 Diabetes", "Hypertension", "Chronic Kidney Disease Stage 3"],
+    "medications": [
+      {
+        "name": "Metformin",
+        "dosage": "500mg",
+        "frequency": "morning",
+        "condition": "diabetes, to control blood sugar"
+      },
+      {
+        "name": "Amlodipine",
+        "dosage": "5mg",
+        "frequency": "morning",
+        "condition": "high blood pressure"
+      },
+      {
+        "name": "Insulin Glargine",
+        "dosage": "10 units",
+        "frequency": "evening",
+        "condition": "diabetes, to control blood sugar overnight"
+      }
+    ],
+    "appointments": [
+      {
+        "doctor": "Lee Wei Ming",
+        "specialty": "Endocrinology",
+        "datetime": "2025-07-17T14:00:00",
+        "location": "SGH Specialist Clinic B, Level 3"
+      }
+    ],
+    "emergency_contact": {
+      "name": "Mary Tan",
+      "phone": "+6591234567",
+      "relation": "daughter"
+    },
+    "call_schedule": "09:00",
+    "conversation_history": [
+      {
+        "date": "2025-07-12",
+        "summary": "Mr. Tan reported feeling tired. Took morning meds. Skipped evening insulin previous night — forgot. Reminded him about insulin routine."
+      },
+      {
+        "date": "2025-07-13",
+        "summary": "Sounded more energetic. Took all meds including evening insulin. Complained of mild knee pain. Suggested he mention it to Dr. Lee."
+      }
+    ]
+  }
+}

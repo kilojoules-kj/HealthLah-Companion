@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HealthLah Companion — Daily Check-in</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <div class="call-container">
+        <div class="header">
+            <h1>🤝 HealthLah</h1>
+            <p class="subtitle">Daily Health Check-in</p>
+        </div>
+
+        <div class="patient-info">
+            <div class="name">Mr. Tan Ah Kow</div>
+            <div class="details">
+                Age 67 · Mandarin · Diabetes, Hypertension, CKD
+            </div>
+        </div>
+
+        <div class="chat-area" id="chatArea"></div>
+        <div id="flagArea"></div>
+        <div class="mood-indicator" id="moodIndicator"></div>
+
+        <div class="controls">
+            <button class="btn btn-start" id="startBtn"
+                    onclick="startCall()">
+                📞 Start Check-in
+            </button>
+            <button class="btn btn-record" id="recordBtn"
+                    onclick="toggleRecording()"
+                    style="display:none;" disabled>
+                🎤
+            </button>
+        </div>
+    </div>
+
+    <script src="/static/recorder.js"></script>
+</body>
+</html>
