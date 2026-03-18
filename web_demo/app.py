@@ -178,10 +178,17 @@ Respond to the user's latest message. Remember to keep it short and conversation
 
         history.append({"role": "assistant", "content": clean_response})
 
+        # Generate TTS for the response
+        audio_path_tts = tts.speak(clean_response, language="english")
+        audio_url = None
+        if audio_path_tts and os.path.exists(audio_path_tts):
+            audio_url = f"/api/audio/{os.path.basename(audio_path_tts)}"
+
         return {
             "transcription": transcription,
             "response": clean_response,
             "risk_factors": risk_factors,
+            "audio_url": audio_url,
         }
     except Exception as e:
         import traceback
@@ -190,6 +197,7 @@ Respond to the user's latest message. Remember to keep it short and conversation
             "transcription": "(audio could not be processed)",
             "response": f"Sorry, I had trouble processing that. Please try again.",
             "risk_factors": [],
+            "audio_url": None,
         }
 
 

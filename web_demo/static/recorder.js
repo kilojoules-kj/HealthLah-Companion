@@ -282,7 +282,7 @@ async function sendRiskAudio(blob) {
         processingMsg.querySelector('.bubble').textContent =
             data.transcription || '(audio processed)';
 
-        addMessage(data.response, 'ai', '', null);
+        addMessage(data.response, 'ai', '', data.audio_url || null);
 
         // Update risk factors panel
         if (data.risk_factors && data.risk_factors.length > 0) {
