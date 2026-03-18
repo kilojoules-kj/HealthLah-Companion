@@ -3,40 +3,443 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>HealthLah Companion — Daily Check-in</title>
+    <title>HealthLah Companion</title>
     <link rel="stylesheet" href="/static/style.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 </head>
 <body>
-    <div class="call-container">
-        <div class="header">
-            <h1>🤝 HealthLah</h1>
-            <p class="subtitle">Daily Health Check-in</p>
-        </div>
 
-        <div class="patient-info">
-            <div class="name">Mr. Tan Ah Kow</div>
-            <div class="details">
-                Age 67 · Mandarin · Diabetes, Hypertension, CKD
+<!-- ═══════════════════ LANDING PAGE ═══════════════════ -->
+<div id="landingPage" class="page active">
+    <nav class="navbar">
+        <div class="nav-brand">
+            <div class="brand-icon">H</div>
+            <span>HealthLah</span>
+        </div>
+        <div class="nav-links">
+            <a href="#how-it-works" class="nav-link">How It Works</a>
+            <a href="#features" class="nav-link">Features</a>
+            <a href="#why-healthlah" class="nav-link">Your Health Matters Lah</a>
+        </div>
+    </nav>
+
+    <div class="hero">
+        <h1>Take charge of your health,<br>one conversation at a time.</h1>
+        <p class="hero-sub">
+            AI-powered voice companion for chronic illness prevention, management, and caregiving.
+            Built for Singapore, powered by MERaLiON.
+        </p>
+    </div>
+
+    <div class="role-cards">
+        <div class="role-card" onclick="selectRole('risk')">
+            <div class="role-icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M9 12l2 2 4-4"/>
+                    <path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20z"/>
+                </svg>
             </div>
+            <h3>Check My Risk</h3>
+            <p>Not sure if you're at risk? Talk to Kawan for a quick, friendly health screening based on your lifestyle and family history.</p>
+            <div class="role-tag">For individuals</div>
         </div>
 
-        <div class="chat-area" id="chatArea"></div>
-        <div id="flagArea"></div>
-        <div class="mood-indicator" id="moodIndicator"></div>
+        <div class="role-card featured" onclick="selectRole('patient')">
+            <div class="role-icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M22 12h-4l-3 9L9 3l-3 9H2"/>
+                </svg>
+            </div>
+            <h3>Daily Check-in</h3>
+            <p>Living with a chronic condition? Kawan checks in daily to track your medications, symptoms, and wellbeing through natural voice conversations.</p>
+            <div class="role-tag">For patients</div>
+        </div>
 
-        <div class="controls">
-            <button class="btn btn-start" id="startBtn"
-                    onclick="startCall()">
-                📞 Start Check-in
-            </button>
-            <button class="btn btn-record" id="recordBtn"
-                    onclick="toggleRecording()"
-                    style="display:none;" disabled>
-                🎤
-            </button>
+        <div class="role-card" onclick="selectRole('caretaker')">
+            <div class="role-icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+                    <circle cx="9" cy="7" r="4"/>
+                    <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
+                    <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+                </svg>
+            </div>
+            <h3>Caretaker Dashboard</h3>
+            <p>Caring for someone with a chronic illness? Monitor their daily check-ins, medication adherence, and health alerts from one place.</p>
+            <div class="role-tag">For families &amp; caregivers</div>
         </div>
     </div>
 
-    <script src="/static/recorder.js"></script>
+    <div class="trust-bar">
+        <div class="trust-item">
+            <strong>7 Languages</strong>
+            <span>EN, ZH, MS, TA, TH, VI, ID</span>
+        </div>
+        <div class="trust-divider"></div>
+        <div class="trust-item">
+            <strong>Singlish-Ready</strong>
+            <span>Understands local speech</span>
+        </div>
+        <div class="trust-divider"></div>
+        <div class="trust-item">
+            <strong>Voice-First</strong>
+            <span>Just talk naturally</span>
+        </div>
+        <div class="trust-divider"></div>
+        <div class="trust-item">
+            <strong>A*STAR MERaLiON</strong>
+            <span>Singapore AI research</span>
+        </div>
+    </div>
+
+    <!-- ── How It Works ─────────────────────────── -->
+    <section id="how-it-works" class="landing-section">
+        <h2>How It Works</h2>
+        <p class="section-sub">Three simple steps to better chronic illness management.</p>
+        <div class="steps-grid">
+            <div class="step-card">
+                <div class="step-number">1</div>
+                <h3>Speak Naturally</h3>
+                <p>Talk to Kawan in English, Mandarin, Malay, Tamil, or even Singlish. No forms, no typing &mdash; just a natural voice conversation.</p>
+            </div>
+            <div class="step-card">
+                <div class="step-number">2</div>
+                <h3>AI Listens &amp; Understands</h3>
+                <p>MERaLiON, Singapore's own speech AI, transcribes your words, detects your mood from vocal cues, and identifies health concerns in real time.</p>
+            </div>
+            <div class="step-card">
+                <div class="step-number">3</div>
+                <h3>Actionable Insights</h3>
+                <p>Medication reminders, symptom flags, and mood trends are shared with your caretakers and healthcare team &mdash; so no one falls through the cracks.</p>
+            </div>
+        </div>
+    </section>
+
+    <!-- ── Features ─────────────────────────────── -->
+    <section id="features" class="landing-section">
+        <h2>Features</h2>
+        <p class="section-sub">Built specifically for chronic illness care in Singapore.</p>
+        <div class="features-grid">
+            <div class="feature-card">
+                <div class="feature-icon">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z"/><path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5"/></svg>
+                </div>
+                <h4>Voice-First Design</h4>
+                <p>Designed for elderly users who may struggle with small text and complex apps. Just talk.</p>
+            </div>
+            <div class="feature-card">
+                <div class="feature-icon">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M2 12h20"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+                </div>
+                <h4>Multilingual + Singlish</h4>
+                <p>Understands 7 languages and Singapore's unique code-switching speech patterns.</p>
+            </div>
+            <div class="feature-card">
+                <div class="feature-icon">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
+                </div>
+                <h4>Daily Health Tracking</h4>
+                <p>Medication adherence, symptom screening, and lifestyle checks &mdash; all through conversation.</p>
+            </div>
+            <div class="feature-card">
+                <div class="feature-icon">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78L12 21.23l8.84-8.84a5.5 5.5 0 0 0 0-7.78z"/></svg>
+                </div>
+                <h4>Mood &amp; Emotion Detection</h4>
+                <p>Vocal biomarker analysis detects fatigue, anxiety, and distress from tone of voice alone.</p>
+            </div>
+            <div class="feature-card">
+                <div class="feature-icon">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+                </div>
+                <h4>Emergency Escalation</h4>
+                <p>Automatic alerts to caregivers and emergency contacts when critical symptoms are detected.</p>
+            </div>
+            <div class="feature-card">
+                <div class="feature-icon">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+                </div>
+                <h4>Caretaker Dashboard</h4>
+                <p>Family members see adherence rates, mood trends, health flags, and appointment reminders at a glance.</p>
+            </div>
+        </div>
+    </section>
+
+    <!-- ── Your Health Matters Lah ──────────────── -->
+    <section id="why-healthlah" class="landing-section why-section">
+        <h2>Your Health Matters, Lah.</h2>
+        <p class="section-sub">Why we built HealthLah Companion.</p>
+        <div class="why-grid">
+            <div class="why-content">
+                <div class="why-stat-row">
+                    <div class="why-stat">
+                        <div class="why-stat-value">1 in 3</div>
+                        <div class="why-stat-label">Singaporeans over 60 have multiple chronic conditions</div>
+                    </div>
+                    <div class="why-stat">
+                        <div class="why-stat-value">50%</div>
+                        <div class="why-stat-label">of chronic disease patients struggle with medication adherence</div>
+                    </div>
+                    <div class="why-stat">
+                        <div class="why-stat-value">Early</div>
+                        <div class="why-stat-label">detection can delay or prevent chronic illness progression</div>
+                    </div>
+                </div>
+                <div class="why-points">
+                    <div class="why-point">
+                        <h4>The problem</h4>
+                        <p>Chronic illness management happens between clinic visits &mdash; but most patients navigate this alone.
+                           Elderly patients forget medications, miss early warning signs, and often lack the digital literacy for health apps.
+                           Caretakers worry but can't check in every day.</p>
+                    </div>
+                    <div class="why-point">
+                        <h4>Our approach</h4>
+                        <p>HealthLah bridges the gap with a voice-first AI companion that speaks your language &mdash; literally.
+                           Built on A*STAR's MERaLiON, Singapore's own multilingual speech AI, Kawan calls patients daily,
+                           listens with empathy, and keeps the care team informed. No app to learn. No buttons to press.
+                           Just a conversation.</p>
+                    </div>
+                    <div class="why-point">
+                        <h4>Made for Singapore</h4>
+                        <p>From Singlish to dialect-influenced Mandarin, from HDB flats to polyclinics &mdash;
+                           HealthLah is designed for the way Singaporeans actually speak and live.
+                           Because healthcare should meet people where they are.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <footer class="landing-footer">
+        <p>HealthLah Companion &mdash; Powered by A*STAR MERaLiON. Built at NUS Hackathon 2025.</p>
+    </footer>
+</div>
+
+<!-- ═══════════════════ RISK ASSESSMENT ═══════════════════ -->
+<div id="riskPage" class="page">
+    <div class="page-header">
+        <button class="back-btn" onclick="goHome()">&larr; Back</button>
+        <div class="page-title">
+            <h2>Health Risk Screening</h2>
+            <p>Talk to Kawan about your lifestyle, family history, and any symptoms.</p>
+        </div>
+    </div>
+
+    <div class="app-layout">
+        <div class="chat-panel">
+            <div class="chat-area" id="riskChatArea">
+                <div class="message ai">
+                    <div class="bubble">
+                        Hello! I'm Kawan, your health companion. I'd like to ask you a few questions
+                        about your lifestyle and family history to understand if you might be at risk
+                        for common chronic conditions like diabetes, hypertension, or heart disease.
+                        <br><br>
+                        You can speak to me in English, Mandarin, Malay, or Tamil.
+                        <br><br>
+                        Let's start: <strong>How old are you, and do any of your parents or grandparents
+                        have diabetes or high blood pressure?</strong>
+                    </div>
+                </div>
+            </div>
+
+            <div class="input-bar">
+                <button class="mic-btn" id="riskRecordBtn" onclick="toggleRecording('risk')">
+                    <svg viewBox="0 0 24 24" fill="currentColor" width="24" height="24">
+                        <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z"/>
+                        <path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/>
+                    </svg>
+                </button>
+                <div class="input-hint" id="riskHint">Tap the microphone and speak naturally</div>
+            </div>
+        </div>
+
+        <div class="side-panel">
+            <div class="panel-card">
+                <h4>Risk Factors Detected</h4>
+                <div id="riskFactors" class="factor-list">
+                    <div class="empty-state">Speak with Kawan to begin your screening.</div>
+                </div>
+            </div>
+            <div class="panel-card">
+                <h4>What We Screen For</h4>
+                <ul class="info-list">
+                    <li>Type 2 Diabetes</li>
+                    <li>Hypertension</li>
+                    <li>Cardiovascular Disease</li>
+                    <li>Chronic Kidney Disease</li>
+                    <li>Hyperlipidaemia</li>
+                </ul>
+                <p class="disclaimer">This is not a medical diagnosis. Please consult a doctor for professional advice.</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ═══════════════════ PATIENT CHECK-IN ═══════════════════ -->
+<div id="patientPage" class="page">
+    <div class="page-header">
+        <button class="back-btn" onclick="goHome()">&larr; Back</button>
+        <div class="page-title">
+            <h2>Daily Check-in</h2>
+            <p>Your regular health conversation with Kawan.</p>
+        </div>
+    </div>
+
+    <div class="app-layout">
+        <div class="chat-panel">
+            <div class="patient-banner" id="patientBanner">
+                <div class="patient-avatar">T</div>
+                <div class="patient-details">
+                    <div class="patient-name">Mr. Tan Ah Kow</div>
+                    <div class="patient-meta">Age 67 &middot; Mandarin &middot; Diabetes, Hypertension, CKD Stage 3</div>
+                </div>
+                <div class="call-status" id="callStatus">Ready</div>
+            </div>
+
+            <div class="chat-area" id="patientChatArea"></div>
+
+            <div class="input-bar">
+                <button class="mic-btn start-call-btn" id="patientStartBtn" onclick="startCall()">
+                    Start Check-in
+                </button>
+                <button class="mic-btn" id="patientRecordBtn" onclick="toggleRecording('patient')" style="display:none;">
+                    <svg viewBox="0 0 24 24" fill="currentColor" width="24" height="24">
+                        <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z"/>
+                        <path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/>
+                    </svg>
+                </button>
+                <div class="input-hint" id="patientHint">Press to begin your daily check-in</div>
+            </div>
+        </div>
+
+        <div class="side-panel">
+            <div class="panel-card">
+                <h4>Call Progress</h4>
+                <div class="phase-tracker">
+                    <div class="phase-step" id="phase-greeting">Greeting</div>
+                    <div class="phase-step" id="phase-medication_check">Medication</div>
+                    <div class="phase-step" id="phase-symptom_screening">Symptoms</div>
+                    <div class="phase-step" id="phase-lifestyle_check">Lifestyle</div>
+                    <div class="phase-step" id="phase-emotional_wellbeing">Wellbeing</div>
+                    <div class="phase-step" id="phase-wrap_up">Wrap-up</div>
+                </div>
+            </div>
+
+            <div class="panel-card">
+                <h4>Mood</h4>
+                <div id="moodDisplay" class="mood-display">--</div>
+            </div>
+
+            <div class="panel-card">
+                <h4>Health Alerts</h4>
+                <div id="flagArea" class="flag-list">
+                    <div class="empty-state">No alerts yet.</div>
+                </div>
+            </div>
+
+            <div class="panel-card">
+                <h4>Today's Medications</h4>
+                <ul class="info-list" id="medsList">
+                    <li>Metformin 500mg (morning)</li>
+                    <li>Amlodipine 5mg (morning)</li>
+                    <li>Insulin Glargine 10u (evening)</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ═══════════════════ CARETAKER DASHBOARD ═══════════════════ -->
+<div id="caretakerPage" class="page">
+    <div class="page-header">
+        <button class="back-btn" onclick="goHome()">&larr; Back</button>
+        <div class="page-title">
+            <h2>Caretaker Dashboard</h2>
+            <p>Monitor your loved ones' daily health check-ins.</p>
+        </div>
+    </div>
+
+    <div class="dashboard">
+        <div class="dash-card patient-summary">
+            <div class="dash-card-header">
+                <div class="patient-avatar">T</div>
+                <div>
+                    <h3>Mr. Tan Ah Kow</h3>
+                    <span class="patient-meta">Age 67 &middot; Diabetes, Hypertension, CKD Stage 3</span>
+                </div>
+                <div class="adherence-badge good">Adherent</div>
+            </div>
+
+            <div class="dash-grid">
+                <div class="stat-card">
+                    <div class="stat-label">Last Check-in</div>
+                    <div class="stat-value" id="lastCheckin">13 Jul 2025</div>
+                    <div class="stat-sub">Sounded energetic</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">Medication Adherence</div>
+                    <div class="stat-value good">85%</div>
+                    <div class="stat-sub">Last 7 days</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">Mood Trend</div>
+                    <div class="stat-value">Stable</div>
+                    <div class="stat-sub">Neutral to cheerful</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">Active Alerts</div>
+                    <div class="stat-value alert">1</div>
+                    <div class="stat-sub">Mild knee pain</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="dash-row">
+            <div class="dash-card">
+                <h4>Recent Check-in Notes</h4>
+                <div class="timeline">
+                    <div class="timeline-entry">
+                        <div class="timeline-date">13 Jul</div>
+                        <div class="timeline-content">
+                            Sounded more energetic. Took all meds including evening insulin.
+                            Complained of mild knee pain. Suggested he mention it to Dr. Lee.
+                        </div>
+                    </div>
+                    <div class="timeline-entry">
+                        <div class="timeline-date">12 Jul</div>
+                        <div class="timeline-content">
+                            Mr. Tan reported feeling tired. Took morning meds.
+                            Skipped evening insulin previous night &mdash; forgot.
+                            Reminded him about insulin routine.
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="dash-card">
+                <h4>Upcoming Appointments</h4>
+                <div class="appointment-list">
+                    <div class="appointment-item">
+                        <div class="appt-date">17 Jul</div>
+                        <div class="appt-details">
+                            <strong>Dr. Lee Wei Ming</strong>
+                            <span>Endocrinology</span>
+                            <span>SGH Specialist Clinic B, Level 3 &middot; 2:00 PM</span>
+                        </div>
+                    </div>
+                </div>
+
+                <h4 style="margin-top: 24px;">Emergency Contact</h4>
+                <div class="contact-card">
+                    <div><strong>Mary Tan</strong> (Daughter)</div>
+                    <div>+65 9123 4567</div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="/static/recorder.js"></script>
 </body>
 </html>
