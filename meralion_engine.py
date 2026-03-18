@@ -4,8 +4,6 @@ import pathlib
 import logging
 import os
 
-from openai import OpenAI
-
 logger = logging.getLogger(__name__)
 
 # MERaLiON hosted API (OpenAI-compatible)
@@ -20,23 +18,36 @@ class MERaLiONEngine:
     The API is OpenAI-compatible, so we use the OpenAI SDK pointed at
     http://meralion.org:8010.  Audio is sent as base64 data URLs.
 
-    No local model download, no GPU required.
+    Falls back to demo mode if the API is unreachable.
     """
 
     def __init__(self, api_key: str = None):
         self.api_key = api_key or os.getenv("MERALION_API_KEY", "")
+        self.demo_mode = False
+
         if not self.api_key:
             logger.warning(
-                "MERALION_API_KEY not set — API calls will fail. "
-                "Register at http://meralion.org:8010 to get a key."
+                "MERALION_API_KEY not set — running in demo mode. "
+                "Set MERALION_API_KEY in .env to use the real API."
             )
+            self.demo_mode = True
+            self.client = None
+            self.model = MERALION_MODEL
+            return
 
-        self.client = OpenAI(
-            base_url=MERALION_BASE_URL,
-            api_key=self.api_key,
-        )
+        try:
+            from openai import OpenAI
+            self.client = OpenAI(
+                base_url=MERALION_BASE_URL,
+                api_key=self.api_key,
+            )
+        except Exception as e:
+            logger.warning(f"Failed to init OpenAI client: {e} — running in demo mode")
+            self.demo_mode = True
+            self.client = None
+
         self.model = MERALION_MODEL
-        logger.info(f"MERaLiON API engine ready (model={self.model})")
+        logger.info(f"MERaLiON engine ready (model={self.model}, demo={self.demo_mode})")
 
     # ── helpers ────────────────────────────────────────────────
 
@@ -54,6 +65,9 @@ class MERaLiONEngine:
 
     def _chat(self, messages: list[dict], max_tokens: int = 512) -> str:
         """Send a chat completion request and return the assistant text."""
+        if self.demo_mode or self.client is None:
+            raise ConnectionError("MERaLiON API not available (demo mode)")
+
         response = self.client.chat.completions.create(
             model=self.model,
             messages=messages,
@@ -72,67 +86,82 @@ class MERaLiONEngine:
     ) -> dict:
         """
         Process one turn: patient audio → MERaLiON API → structured response.
+        Falls back to demo response if API is unavailable.
         """
-        audio_url = self._audio_to_data_url(audio_path)
+        if self.demo_mode:
+            return self._demo_process_audio_turn(audio_path, conversation_history, current_phase_instruction)
 
-        # Build the full instruction for this turn
-        text_prompt = self._build_prompt(
-            system_prompt, conversation_history, current_phase_instruction
-        )
-
-        messages = [
-            {
-                "role": "user",
-                "content": [
-                    {"type": "text", "text": text_prompt},
-                    {
-                        "type": "audio_url",
-                        "audio_url": {"url": audio_url},
-                    },
-                ],
-            }
-        ]
-
-        raw_response = self._chat(messages, max_tokens=512)
-        logger.info(f"Raw response: {raw_response[:200]}...")
-
-        return self._parse_response(raw_response)
+        try:
+            audio_url = self._audio_to_data_url(audio_path)
+            text_prompt = self._build_prompt(
+                system_prompt, conversation_history, current_phase_instruction
+            )
+            messages = [
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": text_prompt},
+                        {
+                            "type": "audio_url",
+                            "audio_url": {"url": audio_url},
+                        },
+                    ],
+                }
+            ]
+            raw_response = self._chat(messages, max_tokens=512)
+            logger.info(f"Raw response: {raw_response[:200]}...")
+            return self._parse_response(raw_response)
+        except Exception as e:
+            logger.warning(f"MERaLiON API call failed: {e} — using demo response")
+            return self._demo_process_audio_turn(audio_path, conversation_history, current_phase_instruction)
 
     def transcribe_only(self, audio_path: str) -> str:
         """Simple transcription via the /audio/transcription endpoint."""
-        audio_url = self._audio_to_data_url(audio_path)
+        if self.demo_mode:
+            return self._demo_transcription()
 
-        messages = [
-            {
-                "role": "user",
-                "content": [
-                    {"type": "text", "text": "Please transcribe this speech."},
-                    {
-                        "type": "audio_url",
-                        "audio_url": {"url": audio_url},
-                    },
-                ],
-            }
-        ]
-        return self._chat(messages, max_tokens=256)
+        try:
+            audio_url = self._audio_to_data_url(audio_path)
+            messages = [
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": "Please transcribe this speech."},
+                        {
+                            "type": "audio_url",
+                            "audio_url": {"url": audio_url},
+                        },
+                    ],
+                }
+            ]
+            return self._chat(messages, max_tokens=256)
+        except Exception as e:
+            logger.warning(f"Transcription failed: {e} — using demo transcription")
+            return self._demo_transcription()
 
     def process_with_instruction(self, audio_path: str, instruction: str) -> str:
         """Send audio + a single instruction to MERaLiON."""
-        audio_url = self._audio_to_data_url(audio_path)
+        if self.demo_mode:
+            return self._demo_risk_response(instruction)
 
-        messages = [
-            {
-                "role": "user",
-                "content": [
-                    {"type": "text", "text": instruction},
-                    {
-                        "type": "audio_url",
-                        "audio_url": {"url": audio_url},
-                    },
-                ],
-            }
-        ]
-        return self._chat(messages, max_tokens=512)
+        try:
+            audio_url = self._audio_to_data_url(audio_path)
+            messages = [
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": instruction},
+                        {
+                            "type": "audio_url",
+                            "audio_url": {"url": audio_url},
+                        },
+                    ],
+                }
+            ]
+            return self._chat(messages, max_tokens=512)
+        except Exception as e:
+            logger.warning(f"Instruction processing failed: {e} — using demo response")
+            return self._demo_risk_response(instruction)
 
     # ── prompt building ────────────────────────────────────────
 
@@ -225,3 +254,73 @@ Listen to the patient's audio carefully and respond in this format:
             )
 
         return result
+
+    # ── Demo / fallback methods ────────────────────────────────
+
+    _demo_turn = 0
+
+    def _demo_transcription(self) -> str:
+        """Return a simulated transcription for demo mode."""
+        import random
+        samples = [
+            "I'm doing okay today, just a bit tired.",
+            "Yes, I took my medication this morning.",
+            "My knees have been aching a bit lately.",
+            "I slept well last night, about 7 hours.",
+            "I had porridge for breakfast and some fruit.",
+            "My daughter came to visit yesterday, that was nice.",
+            "I've been walking in the park every morning.",
+            "Sometimes I feel a bit dizzy when I stand up.",
+        ]
+        return random.choice(samples)
+
+    def _demo_process_audio_turn(
+        self, audio_path: str, conversation_history: list[dict], phase_instruction: str
+    ) -> dict:
+        """Generate a demo response that progresses through the check-in phases."""
+        import random
+        MERaLiONEngine._demo_turn += 1
+        turn = MERaLiONEngine._demo_turn
+
+        transcription = self._demo_transcription()
+
+        moods = ["cheerful", "neutral", "tired", "neutral", "cheerful"]
+        mood = moods[turn % len(moods)]
+
+        responses = [
+            "That's good to hear! Have you taken your morning medications today — your Metformin and Amlodipine?",
+            "Well done for keeping up with your meds! That's very important. How are you feeling physically today — any headaches, dizziness, or discomfort?",
+            "I see, thanks for telling me. Make sure to rest if you feel dizzy. Have you been eating well and getting some exercise?",
+            "Sounds like you're taking good care of yourself! How are you feeling emotionally — have you been in good spirits?",
+            "That's lovely to hear. Remember you have a check-up with Dr. Lim next week. Keep up the good work, and take care ah!",
+        ]
+        response = responses[min(turn - 1, len(responses) - 1)]
+
+        adherence = "taken" if turn <= 2 else "not_applicable"
+        flags = []
+        if "dizzy" in transcription.lower() or "aching" in transcription.lower():
+            flags = ["mild dizziness reported"]
+
+        return {
+            "transcription": transcription,
+            "language_detected": "english",
+            "response_to_patient": response,
+            "health_flags": flags,
+            "mood_assessment": mood,
+            "adherence_status": adherence,
+            "raw_output": f"[DEMO MODE] turn {turn}",
+        }
+
+    def _demo_risk_response(self, instruction: str) -> str:
+        """Generate a demo risk assessment response."""
+        import random
+        MERaLiONEngine._demo_turn += 1
+        turn = MERaLiONEngine._demo_turn
+
+        responses = [
+            "Thank you for sharing that! Can you tell me a bit more — do any of your parents or grandparents have diabetes, high blood pressure, or heart disease?",
+            "I see, that's helpful to know. How about your lifestyle — do you exercise regularly, and how would you describe your diet? Any smoking or regular alcohol consumption?",
+            "Got it. Have you noticed any symptoms like frequent thirst, tiredness, blurry vision, or needing to urinate often? Also, do you know your last blood pressure or blood sugar reading?",
+            "Thanks for all that information! Based on what you've shared, here's what I've noticed:\n\nYou have some risk factors worth monitoring. I'd recommend getting a health screening at your nearest polyclinic — it's subsidised for Singapore residents.\n\nRemember, this is not a diagnosis — just a friendly heads-up to stay proactive about your health!\n\n[RISK_FACTORS] [{\"text\": \"Family history of chronic conditions\", \"level\": \"medium\"}, {\"text\": \"Sedentary lifestyle\", \"level\": \"medium\"}, {\"text\": \"Regular health screening recommended\", \"level\": \"low\"}]",
+        ]
+        return responses[min(turn - 1, len(responses) - 1)]

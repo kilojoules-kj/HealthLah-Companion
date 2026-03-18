@@ -53,12 +53,15 @@ function addMessage(text, role, phase, audioUrl) {
     chatArea.appendChild(msg);
     chatArea.scrollTop = chatArea.scrollHeight;
 
-    // Play AI audio response
+    // Play AI audio response (if available)
     if (audioUrl && role === 'ai') {
         const audio = new Audio(audioUrl);
         audio.play().then(() => {
             audio.onended = () => enableMic();
         }).catch(() => enableMic());
+    } else if (role === 'ai') {
+        // No audio — just re-enable mic after a short delay
+        setTimeout(() => enableMic(), 500);
     }
 }
 
@@ -143,7 +146,7 @@ async function startCall() {
     try {
         const resp = await fetch(`/api/start-call/${PATIENT_ID}`, { method: 'POST' });
         const data = await resp.json();
-        addMessage(data.message, 'ai', data.phase, data.audio_url);
+        addMessage(data.message, 'ai', data.phase, data.audio_url || null);
         updatePhase(data.phase);
     } catch (err) {
         addMessage('Unable to start call. Please check your connection.', 'ai', 'error', null);
@@ -232,7 +235,7 @@ async function sendPatientAudio(blob) {
         processingMsg.querySelector('.bubble').textContent =
             data.patient_said || '(audio processed)';
 
-        addMessage(data.ai_message, 'ai', data.phase, data.audio_url);
+        addMessage(data.ai_message, 'ai', data.phase, data.audio_url || null);
 
         updatePhase(data.phase);
         updateMood(data.mood);
@@ -245,6 +248,8 @@ async function sendPatientAudio(blob) {
             addMessage('Check-in complete. Summary has been saved to the caretaker dashboard.', 'ai', 'completed', null);
             document.getElementById('patientRecordBtn').disabled = true;
             document.getElementById('patientHint').textContent = 'Check-in completed';
+        } else {
+            enableMic();
         }
     } catch (err) {
         processingMsg.classList.remove('processing');

@@ -1,8 +1,18 @@
 # tts_engine.py
-import edge_tts
 import asyncio
 import uuid
 import os
+import logging
+
+logger = logging.getLogger(__name__)
+
+try:
+    import edge_tts
+    HAS_EDGE_TTS = True
+except ImportError:
+    HAS_EDGE_TTS = False
+    logger.warning("edge_tts not installed — TTS will be disabled. Install with: pip install edge-tts")
+
 
 class TTSEngine:
     """Convert AI responses to speech in patient's preferred language."""
@@ -24,7 +34,23 @@ class TTSEngine:
         voice = self.VOICE_MAP.get(language, self.VOICE_MAP["english"])
         output_path = os.path.join(self.output_dir, f"{uuid.uuid4().hex}.mp3")
 
-        asyncio.run(self._generate(text, voice, output_path))
+        if not HAS_EDGE_TTS:
+            logger.warning("TTS skipped (edge_tts not available)")
+            return output_path  # return path even though file won't exist
+
+        try:
+            # Use get_event_loop if one is already running, otherwise asyncio.run
+            try:
+                loop = asyncio.get_running_loop()
+                # If there's already a running loop, schedule as a task
+                import concurrent.futures
+                with concurrent.futures.ThreadPoolExecutor() as pool:
+                    pool.submit(asyncio.run, self._generate(text, voice, output_path)).result()
+            except RuntimeError:
+                asyncio.run(self._generate(text, voice, output_path))
+        except Exception as e:
+            logger.warning(f"TTS generation failed: {e}")
+
         return output_path
 
     async def _generate(self, text: str, voice: str, output_path: str):
