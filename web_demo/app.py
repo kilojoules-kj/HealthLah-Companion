@@ -2,7 +2,10 @@
 from fastapi import FastAPI, UploadFile, File, WebSocket
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse, FileResponse
+from dotenv import load_dotenv
 import shutil, uuid, os
+
+load_dotenv()
 
 from meralion_engine import MERaLiONEngine
 from conversation_manager import ConversationManager
