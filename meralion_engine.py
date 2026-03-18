@@ -1,35 +1,53 @@
-# meralion_engine.py
+# meralion_engine.py (FIXED)
 import torch
 import librosa
 import numpy as np
-from transformers import AutoModelForCausalLM, AutoProcessor
-from typing import Optional
 import logging
+from transformers import AutoModelForSpeechSeq2Seq, AutoProcessor
 
 logger = logging.getLogger(__name__)
 
 
 class MERaLiONEngine:
     """
-    Wraps MERaLiON AudioLLM for:
-    1. Understanding patient speech (audio → meaning)
-    2. Generating contextual responses
-    3. Extracting paralinguistic cues from audio
+    MERaLiON AudioLLM wrapper.
+    
+    Architecture: Whisper encoder + SEA-LION decoder
+    Auto class:   AutoModelForSpeechSeq2Seq
+    Model class:  MERaLiONForConditionalGeneration
+    
+    Input:  audio waveform + text prompt
+    Output: generated text
     """
 
-    def __init__(self, model_id: str = "MERaLiON/MERaLiON-AudioLLM-Whisper-SEA-LION"):
-        logger.info(f"Loading MERaLiON model: {model_id}")
+    def __init__(
+        self,
+        model_id: str = "MERaLiON/MERaLiON-AudioLLM-Whisper-SEA-LION",
+        device: str = None,
+    ):
+        logger.info(f"Loading MERaLiON: {model_id}")
+
+        self.device = device or ("cuda" if torch.cuda.is_available() else "cpu")
+
+        # Load processor (handles audio feature extraction + tokenization)
         self.processor = AutoProcessor.from_pretrained(
             model_id, trust_remote_code=True
         )
-        self.model = AutoModelForCausalLM.from_pretrained(
+
+        # Load model with CORRECT auto class
+        self.model = AutoModelForSpeechSeq2Seq.from_pretrained(
             model_id,
             trust_remote_code=True,
-            torch_dtype=torch.float16,
-            device_map="auto",
+            torch_dtype=torch.float16 if self.device == "cuda" else torch.float32,
+            device_map="auto" if self.device == "cuda" else None,
         )
+
+        if self.device == "cpu":
+            self.model = self.model.to(self.device)
+
         self.model.eval()
-        logger.info("MERaLiON loaded successfully")
+        logger.info(f"MERaLiON loaded on {self.device}")
+        logger.info(f"Model class: {type(self.model).__name__}")
 
     def process_audio_turn(
         self,
@@ -39,44 +57,101 @@ class MERaLiONEngine:
         current_phase_instruction: str,
     ) -> dict:
         """
-        Process one turn of conversation.
-
-        Takes the patient's audio response and returns:
-        - transcription: what they said
-        - understanding: structured interpretation
-        - response: what the AI should say next
-        - flags: any health concerns detected
+        Process one turn: patient audio → MERaLiON → structured response.
+        
+        Since MERaLiON is encoder-decoder (not causal):
+        - Audio → Whisper encoder → audio features
+        - Text prompt → decoder prompt
+        - Model generates response conditioned on BOTH
         """
 
-        # Load audio at 16kHz (MERaLiON expects this)
+        # 1. Load audio
         audio, sr = librosa.load(audio_path, sr=16000)
-
-        # Build the prompt that tells MERaLiON what to do with this audio
-        analysis_prompt = self._build_analysis_prompt(
-            system_prompt, conversation_history, current_phase_instruction
+        logger.info(
+            f"Audio loaded: {len(audio)/sr:.1f}s, sr={sr}"
         )
 
-        # Process through MERaLiON
-        # The audio is passed directly — MERaLiON's Whisper encoder handles it
-        conversation = [
-            {"role": "system", "content": system_prompt},
-            *conversation_history,
-            {
-                "role": "user",
-                "content": [
-                    {"type": "audio", "audio_url": audio_path},
-                    {"type": "text", "text": current_phase_instruction},
-                ],
-            },
-        ]
+        # 2. Build the text prompt
+        #    Since this is seq2seq, we combine system + history + instruction
+        #    into a single text prompt that conditions the decoder
+        text_prompt = self._build_prompt(
+            system_prompt,
+            conversation_history,
+            current_phase_instruction,
+        )
+
+        # 3. Process through MERaLiON processor
+        #    This extracts mel spectrogram features from audio
+        #    AND tokenizes the text prompt
+        inputs = self.processor(
+            audio=audio,
+            sampling_rate=16000,
+            text=text_prompt,
+            return_tensors="pt",
+        )
+
+        # Move to device
+        inputs = {k: v.to(self.model.device) for k, v in inputs.items()}
+
+        # 4. Generate
+        with torch.no_grad():
+            output_ids = self.model.generate(
+                **inputs,
+                max_new_tokens=512,
+                temperature=0.7,
+                do_sample=True,
+                top_p=0.9,
+                # Whisper-style models often need these:
+                language="en",  # or None to auto-detect
+                task="transcribe",
+            )
+
+        # 5. Decode
+        raw_response = self.processor.batch_decode(
+            output_ids, skip_special_tokens=True
+        )[0]
+
+        logger.info(f"Raw response: {raw_response[:200]}...")
+
+        # 6. Parse structured output
+        return self._parse_response(raw_response)
+
+    def transcribe_only(self, audio_path: str) -> str:
+        """Simple transcription — useful for testing."""
+        audio, sr = librosa.load(audio_path, sr=16000)
 
         inputs = self.processor(
-            text=self.processor.apply_chat_template(
-                conversation, tokenize=False, add_generation_prompt=True
-            ),
-            audios=[audio],
-            return_tensors="pt",
+            audio=audio,
             sampling_rate=16000,
+            return_tensors="pt",
+        )
+        inputs = {k: v.to(self.model.device) for k, v in inputs.items()}
+
+        with torch.no_grad():
+            output_ids = self.model.generate(
+                **inputs,
+                max_new_tokens=256,
+            )
+
+        return self.processor.batch_decode(
+            output_ids, skip_special_tokens=True
+        )[0]
+
+    def process_with_instruction(
+        self, audio_path: str, instruction: str
+    ) -> str:
+        """
+        Send audio + a single instruction to MERaLiON.
+        Most flexible method — use this if structured prompting
+        doesn't work well.
+        """
+        audio, sr = librosa.load(audio_path, sr=16000)
+
+        inputs = self.processor(
+            audio=audio,
+            sampling_rate=16000,
+            text=instruction,
+            return_tensors="pt",
         )
         inputs = {k: v.to(self.model.device) for k, v in inputs.items()}
 
@@ -86,27 +161,53 @@ class MERaLiONEngine:
                 max_new_tokens=512,
                 temperature=0.7,
                 do_sample=True,
-                top_p=0.9,
             )
 
-        # Decode only the new tokens
-        new_tokens = output_ids[0][inputs["input_ids"].shape[1]:]
-        raw_response = self.processor.decode(new_tokens, skip_special_tokens=True)
+        return self.processor.batch_decode(
+            output_ids, skip_special_tokens=True
+        )[0]
 
-        # Parse the structured response
-        return self._parse_response(raw_response)
-
-    def _build_analysis_prompt(
-        self, system_prompt: str, history: list, phase_instruction: str
+    def _build_prompt(
+        self,
+        system_prompt: str,
+        conversation_history: list[dict],
+        phase_instruction: str,
     ) -> str:
-        """Build the instruction for MERaLiON to analyze patient audio"""
-        return phase_instruction
+        """
+        Build a single text prompt for the decoder.
+        
+        For encoder-decoder models, we can't do multi-turn chat 
+        the same way as causal LLMs. Instead we pack context into
+        one prompt that tells the model what to do with the audio.
+        """
+
+        # Format recent conversation history as text
+        history_text = ""
+        if conversation_history:
+            recent = conversation_history[-6:]  # last 6 turns
+            history_text = "\n\nPrevious conversation:\n"
+            for turn in recent:
+                role = "Kawan" if turn["role"] == "assistant" else "Patient"
+                history_text += f"{role}: {turn['content']}\n"
+
+        prompt = f"""{system_prompt}
+{history_text}
+
+CURRENT TASK:
+{phase_instruction}
+
+Listen to the patient's audio carefully and respond in this format:
+[TRANSCRIPTION] what the patient said
+[LANGUAGE] detected language
+[MOOD] cheerful/neutral/tired/anxious/sad/confused/distressed
+[ADHERENCE] taken/not_taken/partial/unclear/not_applicable
+[FLAGS] health concerns (comma-separated) or "none"
+[RESPONSE] your warm, short response to the patient"""
+
+        return prompt
 
     def _parse_response(self, raw: str) -> dict:
-        """
-        Parse MERaLiON's structured output.
-        We prompt it to return in a specific format.
-        """
+        """Parse MERaLiON's structured output into a dict."""
         result = {
             "transcription": "",
             "language_detected": "",
@@ -117,67 +218,55 @@ class MERaLiONEngine:
             "raw_output": raw,
         }
 
-        # Parse sections from the structured output
         current_section = None
         for line in raw.strip().split("\n"):
             line = line.strip()
+            if not line:
+                continue
+
             if line.startswith("[TRANSCRIPTION]"):
                 current_section = "transcription"
-                result["transcription"] = line.replace("[TRANSCRIPTION]", "").strip()
+                result["transcription"] = line.replace(
+                    "[TRANSCRIPTION]", ""
+                ).strip()
             elif line.startswith("[LANGUAGE]"):
-                result["language_detected"] = line.replace("[LANGUAGE]", "").strip()
+                current_section = None
+                result["language_detected"] = line.replace(
+                    "[LANGUAGE]", ""
+                ).strip()
+            elif line.startswith("[MOOD]"):
+                current_section = None
+                result["mood_assessment"] = line.replace(
+                    "[MOOD]", ""
+                ).strip()
+            elif line.startswith("[ADHERENCE]"):
+                current_section = None
+                result["adherence_status"] = line.replace(
+                    "[ADHERENCE]", ""
+                ).strip()
+            elif line.startswith("[FLAGS]"):
+                current_section = None
+                flags = line.replace("[FLAGS]", "").strip()
+                result["health_flags"] = [
+                    f.strip()
+                    for f in flags.split(",")
+                    if f.strip() and f.strip().lower() != "none"
+                ]
             elif line.startswith("[RESPONSE]"):
                 current_section = "response"
-                result["response_to_patient"] = line.replace("[RESPONSE]", "").strip()
-            elif line.startswith("[FLAGS]"):
-                flags = line.replace("[FLAGS]", "").strip()
-                result["health_flags"] = [f.strip() for f in flags.split(",") if f.strip() and f.strip().lower() != "none"]
-            elif line.startswith("[MOOD]"):
-                result["mood_assessment"] = line.replace("[MOOD]", "").strip()
-            elif line.startswith("[ADHERENCE]"):
-                result["adherence_status"] = line.replace("[ADHERENCE]", "").strip()
+                result["response_to_patient"] = line.replace(
+                    "[RESPONSE]", ""
+                ).strip()
             elif current_section == "response":
                 result["response_to_patient"] += " " + line
             elif current_section == "transcription":
                 result["transcription"] += " " + line
 
-        # Fallback if parsing fails — use raw output as response
+        # Fallback: if structured parsing fails, use raw as response
         if not result["response_to_patient"]:
             result["response_to_patient"] = raw.strip()
+            logger.warning(
+                "Structured parsing failed — using raw output as response"
+            )
 
         return result
-
-
-class MERaLiONEngineAPI:
-    """
-    Alternative: If hackathon provides a hosted MERaLiON API endpoint
-    instead of running the model locally.
-    """
-
-    def __init__(self, api_url: str, api_key: str):
-        self.api_url = api_url
-        self.api_key = api_key
-
-    def process_audio_turn(self, audio_path, system_prompt,
-                           conversation_history, current_phase_instruction) -> dict:
-        import requests
-        import base64
-
-        with open(audio_path, "rb") as f:
-            audio_b64 = base64.b64encode(f.read()).decode()
-
-        payload = {
-            "audio": audio_b64,
-            "system_prompt": system_prompt,
-            "conversation_history": conversation_history,
-            "instruction": current_phase_instruction,
-        }
-
-        resp = requests.post(
-            f"{self.api_url}/v1/audio/chat",
-            json=payload,
-            headers={"Authorization": f"Bearer {self.api_key}"},
-            timeout=30,
-        )
-        resp.raise_for_status()
-        return self._parse_response(resp.json()["content"])
