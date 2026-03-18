@@ -5,6 +5,15 @@ import numpy as np
 import logging
 from transformers import AutoModelForSpeechSeq2Seq, AutoProcessor
 
+# Compatibility patch for transformers 5.x:
+# HybridCache was removed in v5.2 and replaced by StaticCache.
+# The MERaLiON remote model code still imports HybridCache, so we
+# alias it here before the model is loaded via trust_remote_code.
+import transformers.cache_utils as _cache_utils
+if not hasattr(_cache_utils, "HybridCache"):
+    from transformers.cache_utils import StaticCache
+    _cache_utils.HybridCache = StaticCache
+
 logger = logging.getLogger(__name__)
 
 
