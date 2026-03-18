@@ -26,7 +26,7 @@ os.makedirs("data/calls", exist_ok=True)
 
 @app.get("/", response_class=HTMLResponse)
 async def home():
-    with open("web_demo/templates/call_ui.html") as f:
+    with open("web_demo/templates/call_ui.html", encoding="utf-8") as f:
         return f.read()
 
 
