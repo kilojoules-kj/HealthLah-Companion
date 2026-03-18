@@ -4,6 +4,9 @@ import schedule
 import threading
 import time as time_module
 from datetime import datetime
+from dotenv import load_dotenv
+
+load_dotenv()
 
 from patient_profile import load_patient
 from meralion_engine import MERaLiONEngine
