@@ -36,8 +36,10 @@ How to run
 2. Export env vars (PowerShell example):
    $env:VAPI_API_KEY="..."
    $env:MERALION_API_KEY="..."
-  # Optional fallback only:
-  # $env:VAPI_LISTEN_WS_URL_TEMPLATE="wss://<YOUR-VAPI-LISTEN-ENDPOINT>/{callId}"
+
+# Optional fallback only:
+
+# $env:VAPI_LISTEN_WS_URL_TEMPLATE="wss://<YOUR-VAPI-LISTEN-ENDPOINT>/{callId}"
 
 3. Start your Vapi call and get its call ID.
 
@@ -63,8 +65,8 @@ Important integration notes
   If your payload is different, update parseAudioBufferFromMessage in the script.
 
 - Listen URL resolution order:
-  1) If VAPI_LISTEN_WS_URL_TEMPLATE includes {callId}, use it.
-  2) Otherwise fetch GET /call/{callId} and use call.monitor.listenUrl.
+  1. If VAPI_LISTEN_WS_URL_TEMPLATE includes {callId}, use it.
+  2. Otherwise fetch GET /call/{callId} and use call.monitor.listenUrl.
 
 - This script is middleware-only and should run as a separate process.
   Do not run this in browser code.
