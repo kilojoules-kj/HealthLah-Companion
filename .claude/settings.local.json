@@ -1,0 +1,18 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(find /c/Users/kel25/Documents/Github/HealthLah/HealthLah-Companion/web_demo -type f \\\\\\(-name *.html -o -name *.css -o -name *.js \\\\\\))",
+      "Bash(mkdir -p \"C:/Users/kel25/Documents/Github/HealthLah/HealthLah-Companion/frontend/app/api/patients/[id]/calls\")",
+      "Bash(mkdir -p \"C:/Users/kel25/Documents/Github/HealthLah/HealthLah-Companion/frontend/app/api/patients/[id]/memories\")",
+      "Bash(cp \"C:/Users/kel25/Documents/Github/HealthLah/HealthLah-Companion/everly-main/frontend/components/ui/\"*.tsx \"C:/Users/kel25/Documents/Github/HealthLah/HealthLah-Companion/frontend/components/ui/\")",
+      "Bash(cp \"C:/Users/kel25/Documents/Github/HealthLah/HealthLah-Companion/everly-main/frontend/components/ui/\"*.ts \"C:/Users/kel25/Documents/Github/HealthLah/HealthLah-Companion/frontend/components/ui/\")",
+      "Bash(cp \"C:/Users/kel25/Documents/Github/HealthLah/HealthLah-Companion/everly-main/frontend/hooks/\"*.ts \"C:/Users/kel25/Documents/Github/HealthLah/HealthLah-Companion/frontend/hooks/\")",
+      "Bash(\"C:/Users/kel25/Documents/Github/HealthLah/HealthLah-Companion/frontend/.env.example\":*)",
+      "Bash(\"C:/Users/kel25/Documents/Github/HealthLah/HealthLah-Companion/frontend/app/page.tsx\":*)",
+      "Bash(\"C:/Users/kel25/Documents/Github/HealthLah/HealthLah-Companion/frontend/components/theme-provider.tsx\":*)",
+      "Bash(/c/Users/kel25/AppData/Local/Programs/Python/Python312/python -c \"print\\(''hello''\\)\")",
+      "Bash(node -e \":*)",
+      "Bash(npm install:*)"
+    ]
+  }
+}

@@ -4,3 +4,6 @@ __pycache__/
 data/uploads/
 data/calls/
 data/tts_output/
+.env copy.example
+.env.local
+frontend/.env.example
