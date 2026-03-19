@@ -42,6 +42,13 @@ const VAPI_PUBLIC_KEY = process.env.NEXT_PUBLIC_VAPI_PUBLIC_KEY ?? ""
 const VAPI_ASSISTANT_ID = process.env.NEXT_PUBLIC_VAPI_ASSISTANT_ID ?? ""
 const VAPI_API_KEY = process.env.VAPI_API_KEY ?? "6be1a73e-8103-42c4-ae6f-7c48bca1063c" // Server key for fetching call data
 
+const FIRST_MESSAGE_BY_LANGUAGE: Record<string, string> = {
+  "Mandarin": "你好！我是HealthLah，你的健康伴侣。今天感觉怎么样？",
+  "Malay": "Selamat datang! Saya HealthLah, teman kesihatan anda. Apa khabar hari ini?",
+  "Tamil": "வணக்கம்! நான் HealthLah, உங்கள் உடல்நல தோழன். இன்று எப்படி இருக்கீங்க?",
+  "English": "Hello! I'm HealthLah, your health companion. How are you feeling today?",
+}
+
 function buildVariableValues(patient: Patient | PatientLike): Record<string, string> {
   return {
     patient_name: patient.name ?? "",
@@ -55,6 +62,7 @@ function buildVariableValues(patient: Patient | PatientLike): Record<string, str
       ? JSON.stringify((patient as Patient).medications)
       : "",
     personality_notes: (patient as Patient).personality_notes ?? "",
+    preferred_language: (patient as Patient).preferred_language ?? "English",
   }
 }
 
@@ -394,9 +402,13 @@ export function VapiCallProvider({ children }: { children: ReactNode }) {
     setError(null)
     setIsConnecting(true)
     callIdRef.current = null // Reset call ID
+    const lang = (patient as Patient).preferred_language ?? "English"
+    const firstMessage = FIRST_MESSAGE_BY_LANGUAGE[lang] ?? FIRST_MESSAGE_BY_LANGUAGE["English"]
+
     try {
       const call = await vapi.start(VAPI_ASSISTANT_ID, {
         variableValues: buildVariableValues(patient),
+        firstMessage,
       })
       // Try to capture call ID from the returned call object
       const returnedCallId = (call as any)?.id || (call as any)?.callId

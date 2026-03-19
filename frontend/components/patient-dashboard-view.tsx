@@ -155,32 +155,11 @@ function moodFromScore(score: number): "happy" | "neutral" | "sad" {
 
 export function PatientDashboardView({ patient, calls = [], notes = [], onBack, onRefresh }: PatientDashboardViewProps) {
   const [callFilter, setCallFilter] = useState<"week" | "all">("week")
-  const [testCallOpen, setTestCallOpen] = useState(false)
-  const [phoneCallLoading, setPhoneCallLoading] = useState(false)
-  const [phoneCallError, setPhoneCallError] = useState<string | null>(null)
+  const [callDialogOpen, setCallDialogOpen] = useState(false)
   const { startCall, endCall, isActive, isConnecting, error } = useVapi()
 
-  const startPhoneCall = async () => {
-    setPhoneCallError(null)
-    setPhoneCallLoading(true)
-    try {
-      const res = await fetch("/api/call", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ patientId: patient.id }),
-      })
-      const data = await res.json()
-      if (!res.ok) throw new Error(data.error ?? "Call failed")
-      onRefresh?.()
-    } catch (e) {
-      setPhoneCallError(e instanceof Error ? e.message : "Failed to place call")
-    } finally {
-      setPhoneCallLoading(false)
-    }
-  }
-
-  const startTestCall = () => {
-    setTestCallOpen(false)
+  const startBrowserCall = () => {
+    setCallDialogOpen(false)
     startCall(patient)
   }
 
@@ -278,11 +257,11 @@ export function PatientDashboardView({ patient, calls = [], notes = [], onBack, 
           <Button
             variant="outline"
             className="border-border shrink-0"
-            onClick={() => setTestCallOpen(true)}
+            onClick={() => setCallDialogOpen(true)}
             disabled={isConnecting || isActive}
           >
             <PhoneCall className="w-4 h-4 mr-2" />
-            Test call
+            Start call
           </Button>
         </div>
 
@@ -291,34 +270,34 @@ export function PatientDashboardView({ patient, calls = [], notes = [], onBack, 
           <div className="fixed inset-0 bg-black/60 z-40 pointer-events-none" />
         ) : null}
 
-        {/* Test call dialog */}
-        <Dialog open={testCallOpen} onOpenChange={setTestCallOpen}>
+        {/* Call dialog */}
+        <Dialog open={callDialogOpen} onOpenChange={setCallDialogOpen}>
           <DialogContent className="rounded-[28px] border-border">
             <DialogHeader>
-              <DialogTitle className="font-heading">Test call</DialogTitle>
+              <DialogTitle className="font-heading">Start call</DialogTitle>
               <DialogDescription className="text-muted-foreground">
-                Talk to the assistant in your browser. No phone call will be made—you’ll hear and speak through this device.
+                Talk to the AI companion in your browser. You’ll hear and speak through this device.
               </DialogDescription>
             </DialogHeader>
             <DialogFooter>
-              <Button variant="outline" onClick={() => setTestCallOpen(false)}>
+              <Button variant="outline" onClick={() => setCallDialogOpen(false)}>
                 Cancel
               </Button>
               <Button
                 className="bg-primary hover:bg-primary/90 text-primary-foreground"
-                onClick={startTestCall}
+                onClick={startBrowserCall}
                 disabled={isConnecting || isActive}
               >
                 {isConnecting ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Phone className="w-4 h-4 mr-2" />}
-                Start test call
+                Start call
               </Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
 
-        {(error || phoneCallError) && (
+        {error && (
           <div className="mb-4 p-3 rounded-[28px] bg-secondary border border-border text-destructive text-sm">
-            {error ?? phoneCallError}
+            {error}
           </div>
         )}
 
@@ -384,11 +363,11 @@ export function PatientDashboardView({ patient, calls = [], notes = [], onBack, 
                   <Button
                     size="sm"
                     className="bg-primary text-primary-foreground"
-                    onClick={startPhoneCall}
-                    disabled={phoneCallLoading || isActive}
+                    onClick={() => setCallDialogOpen(true)}
+                    disabled={isConnecting || isActive}
                   >
-                    {phoneCallLoading ? <Loader2 className="w-4 h-4 animate-spin mr-1.5" /> : <Phone className="w-4 h-4 mr-1.5" />}
-                    Schedule Call
+                    {isConnecting ? <Loader2 className="w-4 h-4 animate-spin mr-1.5" /> : <Phone className="w-4 h-4 mr-1.5" />}
+                    Start Call
                   </Button>
                   {onBack && (
                     <Button variant="ghost" size="icon" onClick={onBack}>
