@@ -1,12 +1,17 @@
 import { NextResponse } from "next/server"
 import fs from "node:fs/promises"
 import path from "node:path"
+import os from "node:os"
 
 export const runtime = "nodejs"
 
+function getBridgeLogDir(): string {
+  return process.env.BRIDGE_LOG_DIR || path.join(os.tmpdir(), "healthlah-bridge-logs")
+}
+
 export async function GET() {
   try {
-    const dirPath = path.join(process.cwd(), "data", "bridge-logs")
+    const dirPath = getBridgeLogDir()
     let files: string[] = []
 
     try {

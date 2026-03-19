@@ -1,8 +1,13 @@
 import { NextRequest, NextResponse } from "next/server"
 import fs from "node:fs/promises"
 import path from "node:path"
+import os from "node:os"
 
 export const runtime = "nodejs"
+
+function getBridgeLogDir(): string {
+  return process.env.BRIDGE_LOG_DIR || path.join(os.tmpdir(), "healthlah-bridge-logs")
+}
 
 type BridgeLogEntry = {
   ts: string
@@ -29,7 +34,7 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: "invalid callId" }, { status: 400 })
     }
 
-    const filePath = path.join(process.cwd(), "data", "bridge-logs", `${callId}.jsonl`)
+    const filePath = path.join(getBridgeLogDir(), `${callId}.jsonl`)
 
     let raw = ""
     try {

@@ -2,6 +2,7 @@ import fs from "node:fs"
 import process from "node:process"
 import WebSocket from "ws"
 import path from "node:path"
+import os from "node:os"
 
 /**
  * HealthLah raw-audio bridge:
@@ -23,8 +24,7 @@ const meralionApiKey = process.env.MERALION_API_KEY || ""
 const meralionBaseUrl = process.env.MERALION_BASE_URL || "http://meralion.org:8010/v1"
 const meralionModel = process.env.MERALION_MODEL || "MERaLiON/MERaLiON-3-10B"
 
-// IMPORTANT: Set this from your Vapi dashboard/docs for Call Listen WS.
-// Example shape: wss://api.vapi.ai/call/{callId}/listen
+// Optional static template fallback. Recommended: leave empty and resolve dynamically via call.monitor.listenUrl.
 const vapiListenUrlTemplate = process.env.VAPI_LISTEN_WS_URL_TEMPLATE || ""
 
 const sampleRate = Number(process.env.BRIDGE_SAMPLE_RATE || 16000)
@@ -46,16 +46,10 @@ if (!meralionApiKey) {
   process.exit(1)
 }
 
-if (!vapiListenUrlTemplate || !vapiListenUrlTemplate.includes("{callId}")) {
-  console.error(`${LOG_PREFIX} Missing VAPI_LISTEN_WS_URL_TEMPLATE (must include {callId}).`)
-  process.exit(1)
-}
-
-const listenUrl = vapiListenUrlTemplate.replace("{callId}", callId)
 const pcmChunks = []
 let bytesBuffered = 0
 let isFlushing = false
-const bridgeLogDir = path.join(process.cwd(), "data", "bridge-logs")
+const bridgeLogDir = process.env.BRIDGE_LOG_DIR || path.join(os.tmpdir(), "healthlah-bridge-logs")
 const bridgeLogFile = path.join(bridgeLogDir, `${callId}.jsonl`)
 
 if (!fs.existsSync(bridgeLogDir)) {
@@ -78,6 +72,59 @@ writeBridgeLog("info", "bridge-init", {
   chunkSeconds,
   meralionModel,
 })
+
+async function resolveListenUrl() {
+  // Backward-compatible static template mode.
+  if (vapiListenUrlTemplate && vapiListenUrlTemplate.includes("{callId}")) {
+    return vapiListenUrlTemplate.replace("{callId}", callId)
+  }
+
+  // Some setups may explicitly set this placeholder to indicate dynamic resolution.
+  if (vapiListenUrlTemplate && vapiListenUrlTemplate !== "{{call.monitor.listenUrl}}") {
+    console.warn(`${LOG_PREFIX} VAPI_LISTEN_WS_URL_TEMPLATE does not include {callId}; ignoring and resolving dynamically.`)
+  }
+
+  const maxAttempts = 8
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    const res = await fetch(`https://api.vapi.ai/call/${callId}`, {
+      headers: {
+        Authorization: `Bearer ${vapiApiKey}`,
+      },
+    })
+
+    if (!res.ok) {
+      const txt = await res.text()
+      writeBridgeLog("warn", "call-details-fetch-failed", {
+        attempt,
+        status: res.status,
+        body: txt,
+      })
+      await new Promise((r) => setTimeout(r, 1200))
+      continue
+    }
+
+    const call = await res.json()
+    const listenUrl =
+      call?.monitor?.listenUrl ||
+      call?.monitor?.listenURL ||
+      call?.listenUrl ||
+      null
+
+    if (typeof listenUrl === "string" && listenUrl.startsWith("ws")) {
+      writeBridgeLog("info", "listen-url-resolved", { attempt, via: "call.monitor.listenUrl" })
+      return listenUrl
+    }
+
+    writeBridgeLog("warn", "listen-url-missing", {
+      attempt,
+      keys: Object.keys(call || {}),
+      hasMonitor: !!call?.monitor,
+    })
+    await new Promise((r) => setTimeout(r, 1200))
+  }
+
+  throw new Error("Unable to resolve monitor.listenUrl from Vapi call details")
+}
 
 function parseAudioBufferFromMessage(raw) {
   if (Buffer.isBuffer(raw)) {
@@ -273,50 +320,63 @@ async function flushBufferedAudio() {
   }
 }
 
-const ws = new WebSocket(listenUrl, {
-  headers: {
-    Authorization: `Bearer ${vapiApiKey}`,
-  },
-})
-
 const chunkTargetBytes = sampleRate * 2 * chunkSeconds
 let lastFlushAt = Date.now()
 
-ws.on("open", () => {
-  console.log(`${LOG_PREFIX} connected to Vapi listen websocket for call ${callId}`)
-  writeBridgeLog("info", "ws-open")
-})
+async function main() {
+  try {
+    const listenUrl = await resolveListenUrl()
+    const ws = new WebSocket(listenUrl, {
+      headers: {
+        Authorization: `Bearer ${vapiApiKey}`,
+      },
+    })
 
-ws.on("message", async (message) => {
-  const audio = parseAudioBufferFromMessage(message)
-  if (!audio) return
+    ws.on("open", () => {
+      console.log(`${LOG_PREFIX} connected to Vapi listen websocket for call ${callId}`)
+      writeBridgeLog("info", "ws-open")
+    })
 
-  pcmChunks.push(audio)
-  bytesBuffered += audio.length
+    ws.on("message", async (message) => {
+      const audio = parseAudioBufferFromMessage(message)
+      if (!audio) return
 
-  const enoughBytes = bytesBuffered >= chunkTargetBytes
-  const enoughTime = Date.now() - lastFlushAt >= chunkSeconds * 1000
-  if (enoughBytes || enoughTime) {
-    lastFlushAt = Date.now()
-    void flushBufferedAudio()
+      pcmChunks.push(audio)
+      bytesBuffered += audio.length
+
+      const enoughBytes = bytesBuffered >= chunkTargetBytes
+      const enoughTime = Date.now() - lastFlushAt >= chunkSeconds * 1000
+      if (enoughBytes || enoughTime) {
+        lastFlushAt = Date.now()
+        void flushBufferedAudio()
+      }
+    })
+
+    ws.on("close", async () => {
+      console.log(`${LOG_PREFIX} Vapi listen websocket closed`)
+      writeBridgeLog("info", "ws-close")
+      await flushBufferedAudio()
+      process.exit(0)
+    })
+
+    ws.on("error", (err) => {
+      console.error(`${LOG_PREFIX} websocket error`, err)
+      writeBridgeLog("error", "ws-error", {
+        error: err instanceof Error ? err.message : String(err),
+      })
+    })
+
+    process.on("SIGINT", async () => {
+      console.log(`${LOG_PREFIX} shutting down`)
+      ws.close()
+    })
+  } catch (err) {
+    console.error(`${LOG_PREFIX} startup failed`, err)
+    writeBridgeLog("error", "startup-failed", {
+      error: err instanceof Error ? err.message : String(err),
+    })
+    process.exit(1)
   }
-})
+}
 
-ws.on("close", async () => {
-  console.log(`${LOG_PREFIX} Vapi listen websocket closed`)
-  writeBridgeLog("info", "ws-close")
-  await flushBufferedAudio()
-  process.exit(0)
-})
-
-ws.on("error", (err) => {
-  console.error(`${LOG_PREFIX} websocket error`, err)
-  writeBridgeLog("error", "ws-error", {
-    error: err instanceof Error ? err.message : String(err),
-  })
-})
-
-process.on("SIGINT", async () => {
-  console.log(`${LOG_PREFIX} shutting down`)
-  ws.close()
-})
+void main()

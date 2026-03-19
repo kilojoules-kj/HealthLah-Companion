@@ -80,6 +80,44 @@ export function VapiCallProvider({ children }: { children: ReactNode }) {
   const [error, setError] = useState<string | null>(null)
   const [lastCallData, setLastCallData] = useState<any | null>(null)
 
+  const startBridge = useCallback(async (callId: string) => {
+    if (!callId) return
+    try {
+      const res = await fetch("/api/bridge/start", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ callId }),
+      })
+      const payload = await res.json().catch(() => ({}))
+      if (res.ok && payload?.started) {
+        console.log("[MERaLiON][Browser] bridge started for call:", callId)
+      } else {
+        console.warn("[MERaLiON][Browser] bridge start response:", payload)
+      }
+    } catch (e) {
+      console.error("[MERaLiON][Browser] bridge start failed:", e)
+    }
+  }, [])
+
+  const stopBridge = useCallback(async (callId: string) => {
+    if (!callId) return
+    try {
+      const res = await fetch("/api/bridge/stop", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ callId }),
+      })
+      const payload = await res.json().catch(() => ({}))
+      if (res.ok && payload?.stopped) {
+        console.log("[MERaLiON][Browser] bridge stopped for call:", callId)
+      } else {
+        console.warn("[MERaLiON][Browser] bridge stop response:", payload)
+      }
+    } catch (e) {
+      console.error("[MERaLiON][Browser] bridge stop failed:", e)
+    }
+  }, [])
+
   // Fetch call data from Vapi API after call ends
   const fetchAndSaveCallData = useCallback(async (callId: string) => {
     console.log("[Vapi] Starting to fetch call data for:", callId)
@@ -317,6 +355,11 @@ export function VapiCallProvider({ children }: { children: ReactNode }) {
     const onStart = (event: any) => {
       console.log("[Vapi] ✅ Call started event:", event)
       storeCallId(event)
+      const callId = event?.call?.id || event?.callId || event?.id || callIdRef.current
+      if (callId) {
+        bridgeCallIdRef.current = callId
+        void startBridge(callId)
+      }
       setIsConnecting(false)
       setIsActive(true)
       setError(null)
@@ -334,6 +377,8 @@ export function VapiCallProvider({ children }: { children: ReactNode }) {
       }
       
       if (callId) {
+        bridgeCallIdRef.current = callId
+        void stopBridge(callId)
         console.log("[Vapi] Initiating data fetch for call:", callId)
         fetchAndSaveCallData(callId)
       } else {
@@ -377,7 +422,7 @@ export function VapiCallProvider({ children }: { children: ReactNode }) {
       vapi.removeListener("call-end", onEnd)
       vapi.removeListener("error", onError as () => void)
     }
-  }, [fetchAndSaveCallData])
+  }, [fetchAndSaveCallData, startBridge, stopBridge])
 
   useEffect(() => {
     if (!isActive) {
@@ -476,7 +521,9 @@ export function VapiCallProvider({ children }: { children: ReactNode }) {
       const returnedCallId = (call as any)?.id || (call as any)?.callId
       if (returnedCallId) {
         callIdRef.current = returnedCallId
+        bridgeCallIdRef.current = returnedCallId
         console.log("[Vapi] ✅ Call started with ID:", callIdRef.current)
+        void startBridge(returnedCallId)
       }
     } catch (e) {
       console.error("[Vapi] ❌ Start error:", e)
@@ -484,10 +531,14 @@ export function VapiCallProvider({ children }: { children: ReactNode }) {
       setIsConnecting(false)
       patientIdRef.current = null
     }
-  }, [])
+  }, [startBridge])
 
   const endCall = useCallback(async () => {
     const vapi = vapiRef.current
+    const callId = callIdRef.current || bridgeCallIdRef.current
+    if (callId) {
+      void stopBridge(callId)
+    }
     if (vapi) {
       console.log("[Vapi] 👋 Stopping call...")
       await vapi.stop()
@@ -495,7 +546,7 @@ export function VapiCallProvider({ children }: { children: ReactNode }) {
     setIsActive(false)
     setIsConnecting(false)
     bridgeLogCursorRef.current = 0
-  }, [])
+  }, [stopBridge])
 
   const value: VapiContextValue = {
     isActive,
