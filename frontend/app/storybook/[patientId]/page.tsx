@@ -221,7 +221,7 @@ const categoryConfig: Record<string, { title: string; icon: string; color: strin
   },
 }
 
-export default function Health LogPage() {
+export default function HealthLogPage() {
   const params = useParams()
   const patientId = params.patientId as string
   
