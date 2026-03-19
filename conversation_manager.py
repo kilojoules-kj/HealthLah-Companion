@@ -35,9 +35,16 @@ PHASE_ORDER = [
 ]
 
 EMERGENCY_KEYWORDS = [
+    # English
     "chest pain", "cannot breathe", "stroke", "fall down",
-    "bleeding", "fainted", "胸口痛", "不能呼吸", "跌倒", "头很晕",
+    "bleeding", "fainted",
+    # Mandarin
+    "胸口痛", "不能呼吸", "跌倒", "头很晕",
+    # Malay
     "sakit dada", "tak boleh nafas",
+    # Tamil
+    "நெஞ்சு வலி", "மூச்சு விட முடியல", "விழுந்துட்டேன்", "தலை சுத்துது",
+    "ரத்தம் வருது",
 ]
 
 
@@ -391,6 +398,7 @@ Pay special attention to VOICE TONE — sadness, flatness, or withdrawal.""",
             "english": f"Good morning, {patient.preferred_name}! This is Kawan, your health buddy. How are you feeling today?",
             "mandarin": f"早安，{patient.preferred_name}！我是Kawan，你的健康好朋友。你今天感觉怎么样？",
             "malay": f"Selamat pagi, {patient.preferred_name}! Saya Kawan, teman kesihatan anda. Apa khabar hari ini?",
+            "tamil": f"காலை வணக்கம், {patient.preferred_name}! நான் Kawan, உங்கள் உடல்நல தோழன். இன்று எப்படி இருக்கீங்க?",
             "hokkien": f"Good morning, {patient.preferred_name}! 我是Kawan. 你今日感觉怎样？",
         }
 

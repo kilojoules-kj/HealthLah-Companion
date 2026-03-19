@@ -12,6 +12,7 @@ import {
 import Vapi from "@vapi-ai/web"
 import { createClient } from "@supabase/supabase-js"
 import type { Patient } from "@/app/types"
+import { getLanguageConfig, buildLanguageOverrides } from "@/app/lib/language-config"
 
 // Supabase client for saving call data
 const supabase = createClient(
@@ -42,14 +43,11 @@ const VAPI_PUBLIC_KEY = process.env.NEXT_PUBLIC_VAPI_PUBLIC_KEY ?? ""
 const VAPI_ASSISTANT_ID = process.env.NEXT_PUBLIC_VAPI_ASSISTANT_ID ?? ""
 const VAPI_API_KEY = process.env.VAPI_API_KEY ?? "6be1a73e-8103-42c4-ae6f-7c48bca1063c" // Server key for fetching call data
 
-const FIRST_MESSAGE_BY_LANGUAGE: Record<string, string> = {
-  "Mandarin": "你好！我是HealthLah，你的健康伴侣。今天感觉怎么样？",
-  "Malay": "Selamat datang! Saya HealthLah, teman kesihatan anda. Apa khabar hari ini?",
-  "Tamil": "வணக்கம்! நான் HealthLah, உங்கள் உடல்நல தோழன். இன்று எப்படி இருக்கீங்க?",
-  "English": "Hello! I'm HealthLah, your health companion. How are you feeling today?",
-}
+// Language-specific first messages and VAPI overrides are now in language-config.ts
 
 function buildVariableValues(patient: Patient | PatientLike): Record<string, string> {
+  const lang = (patient as Patient).preferred_language ?? "English"
+  const langConfig = getLanguageConfig(lang)
   return {
     patient_name: patient.name ?? "",
     patient_age: String(patient.age ?? ""),
@@ -62,7 +60,8 @@ function buildVariableValues(patient: Patient | PatientLike): Record<string, str
       ? JSON.stringify((patient as Patient).medications)
       : "",
     personality_notes: (patient as Patient).personality_notes ?? "",
-    preferred_language: (patient as Patient).preferred_language ?? "English",
+    preferred_language: lang,
+    language_instruction: langConfig.systemPromptLanguageInstruction,
   }
 }
 
@@ -295,11 +294,23 @@ export function VapiCallProvider({ children }: { children: ReactNode }) {
         console.warn("[Vapi] ⚠️ No error but no data returned from insert")
       }
       
+      // Trigger risk analysis asynchronously
+      if (inserted?.id) {
+        fetch("/api/risk/analyze", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ callId: inserted.id }),
+        })
+          .then((r) => r.json())
+          .then((r) => console.log("[Vapi] Risk analysis:", r.assessment?.risk_level, "score:", r.assessment?.risk_score))
+          .catch((e) => console.error("[Vapi] Risk analysis failed:", e))
+      }
+
       // Also save memory if there's a story
-      console.log("[Vapi] 💭 Checking if memory should be saved...", { 
-        has_story: safeData.has_story, 
-        has_content: !!safeData.chapter_content, 
-        inserted_id: inserted?.id 
+      console.log("[Vapi] 💭 Checking if memory should be saved...", {
+        has_story: safeData.has_story,
+        has_content: !!safeData.chapter_content,
+        inserted_id: inserted?.id
       })
       
       if (safeData.has_story && safeData.chapter_content && inserted?.id) {
@@ -522,12 +533,14 @@ export function VapiCallProvider({ children }: { children: ReactNode }) {
     setIsConnecting(true)
     callIdRef.current = null // Reset call ID
     const lang = (patient as Patient).preferred_language ?? "English"
-    const firstMessage = FIRST_MESSAGE_BY_LANGUAGE[lang] ?? FIRST_MESSAGE_BY_LANGUAGE["English"]
+    const langOverrides = buildLanguageOverrides(lang)
 
     try {
       const call = await vapi.start(VAPI_ASSISTANT_ID, {
         variableValues: buildVariableValues(patient),
-        firstMessage,
+        firstMessage: langOverrides.firstMessage,
+        transcriber: langOverrides.transcriber,
+        voice: langOverrides.voice,
       })
       // Try to capture call ID from the returned call object
       const returnedCallId = (call as any)?.id || (call as any)?.callId

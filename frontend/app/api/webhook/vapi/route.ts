@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { updateCallLog, createMemory, getCallLogByVapiCallId, createCallLog } from "@/app/lib/supabase"
+import { analyseCallRisk } from "@/app/lib/risk-engine"
+import { supabaseAdmin } from "@/app/lib/supabase"
 
 // VAPI webhook handler - captures call data and saves to database
 export async function POST(req: NextRequest) {
@@ -158,5 +160,67 @@ async function handleCallEnded(message: any) {
     })
   }
 
+  // ── Risk Analysis (async, non-blocking) ──────────────────
+  // Fire off MERaLiON risk analysis on the transcript and save results.
+  if (transcript && transcript.length >= 10) {
+    triggerRiskAnalysis(vapiCallId, transcript, existingLog.patient_id).catch((err) =>
+      console.error("[VAPI Webhook] Risk analysis failed:", err)
+    )
+  }
+
   console.log("[VAPI Webhook] Call processed successfully")
+}
+
+async function triggerRiskAnalysis(
+  vapiCallId: string,
+  transcript: string,
+  patientId: string | null
+) {
+  let patientContext: Record<string, unknown> = {}
+
+  if (patientId) {
+    const { data: patient } = await supabaseAdmin
+      .from("patients")
+      .select("name, age, conditions, medications, preferred_language")
+      .eq("id", patientId)
+      .maybeSingle()
+
+    if (patient) {
+      patientContext = {
+        name: patient.name,
+        age: patient.age,
+        conditions: patient.conditions,
+        medications:
+          typeof patient.medications === "string"
+            ? patient.medications
+            : JSON.stringify(patient.medications),
+        preferred_language: patient.preferred_language,
+      }
+    }
+  }
+
+  console.log("[VAPI Webhook] Running risk analysis for call:", vapiCallId)
+  const assessment = await analyseCallRisk(transcript, patientContext as any)
+  console.log(
+    "[VAPI Webhook] Risk result:",
+    assessment.risk_level,
+    "score:",
+    assessment.risk_score
+  )
+
+  const { error: updateErr } = await supabaseAdmin
+    .from("call_logs")
+    .update({
+      risk_level: assessment.risk_level,
+      risk_score: assessment.risk_score,
+      emotional_analysis: assessment.emotional_analysis,
+      concern_flags: assessment.risk_factors.length > 0 ? assessment.risk_factors : undefined,
+    })
+    .eq("vapi_call_id", vapiCallId)
+
+  if (updateErr) {
+    console.error("[VAPI Webhook] Failed to save risk assessment:", updateErr)
+  } else {
+    console.log("[VAPI Webhook] Risk assessment saved to Supabase")
+  }
 }

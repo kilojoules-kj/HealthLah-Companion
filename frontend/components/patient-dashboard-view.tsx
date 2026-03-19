@@ -25,6 +25,11 @@ import {
   PhoneCall,
   ChevronRight,
   Sparkles,
+  AlertTriangle,
+  ShieldCheck,
+  Brain,
+  TrendingUp,
+  TrendingDown,
 } from "lucide-react"
 import { useVapi } from "@/components/vapi-call-provider"
 import type { Patient, CallLog, Memory } from "@/app/types"
@@ -229,6 +234,31 @@ export function PatientDashboardView({ patient, calls = [], notes = [], onBack, 
   const displayMeds = [...FALLBACK.healthSchedule]
   const displayTopics = topicsThisMonth.length > 0 ? topicsThisMonth : [...FALLBACK.topics]
 
+  // ── Risk assessment data ──────────────────────────────────
+  const callsWithRisk = calls.filter((c) => c.risk_score !== undefined && c.risk_score !== null)
+  const latestRiskCall = callsWithRisk[0] // calls are already sorted desc
+  const latestRiskScore = latestRiskCall?.risk_score ?? null
+  const latestRiskLevel = latestRiskCall?.risk_level ?? null
+  const latestEmotional = latestRiskCall?.emotional_analysis ?? null
+
+  // Risk trend: compare latest 3 vs previous 3
+  const recentRiskScores = callsWithRisk.slice(0, 3).map((c) => c.risk_score ?? 0)
+  const olderRiskScores = callsWithRisk.slice(3, 6).map((c) => c.risk_score ?? 0)
+  const avgRecent = recentRiskScores.length > 0
+    ? recentRiskScores.reduce((a, b) => a + b, 0) / recentRiskScores.length
+    : null
+  const avgOlder = olderRiskScores.length > 0
+    ? olderRiskScores.reduce((a, b) => a + b, 0) / olderRiskScores.length
+    : null
+  const riskTrend: "improving" | "worsening" | "stable" | null =
+    avgRecent !== null && avgOlder !== null
+      ? avgRecent < avgOlder - 5
+        ? "improving"
+        : avgRecent > avgOlder + 5
+          ? "worsening"
+          : "stable"
+      : null
+
   const alertLabel = latestAlert
     ? (() => {
         const d = new Date(latestAlert.started_at)
@@ -389,6 +419,154 @@ export function PatientDashboardView({ patient, calls = [], notes = [], onBack, 
                   <Button variant="outline" size="sm" className="border-border shrink-0">
                     View details
                   </Button>
+                </div>
+              )}
+            </div>
+
+            {/* Risk Assessment Card */}
+            <div className="paper-card p-6">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider font-mono flex items-center gap-2">
+                  <Brain className="w-4 h-4" />
+                  Emotional Risk Assessment
+                </h3>
+                {riskTrend && (
+                  <span className={`flex items-center gap-1 text-xs font-medium ${
+                    riskTrend === "improving" ? "text-chart-1" : riskTrend === "worsening" ? "text-destructive" : "text-muted-foreground"
+                  }`}>
+                    {riskTrend === "improving" ? <TrendingDown className="w-3.5 h-3.5" /> : riskTrend === "worsening" ? <TrendingUp className="w-3.5 h-3.5" /> : null}
+                    {riskTrend === "improving" ? "Improving" : riskTrend === "worsening" ? "Worsening" : "Stable"}
+                  </span>
+                )}
+              </div>
+
+              {latestRiskCall ? (
+                <div className="space-y-4">
+                  {/* Risk score gauge */}
+                  <div className="flex items-center gap-4">
+                    <div className={`w-16 h-16 rounded-full flex items-center justify-center text-lg font-bold border-4 ${
+                      latestRiskLevel === "critical" ? "border-destructive text-destructive bg-destructive/10" :
+                      latestRiskLevel === "high" ? "border-chart-4 text-chart-4 bg-chart-4/10" :
+                      latestRiskLevel === "moderate" ? "border-chart-3 text-chart-3 bg-chart-3/10" :
+                      "border-chart-1 text-chart-1 bg-chart-1/10"
+                    }`}>
+                      {latestRiskScore}
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        {latestRiskLevel === "critical" || latestRiskLevel === "high" ? (
+                          <AlertTriangle className="w-4 h-4 text-destructive" />
+                        ) : (
+                          <ShieldCheck className="w-4 h-4 text-chart-1" />
+                        )}
+                        <span className={`text-sm font-semibold capitalize ${
+                          latestRiskLevel === "critical" ? "text-destructive" :
+                          latestRiskLevel === "high" ? "text-chart-4" :
+                          latestRiskLevel === "moderate" ? "text-chart-3" :
+                          "text-chart-1"
+                        }`}>
+                          {latestRiskLevel} risk
+                        </span>
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        Last assessed {formatDateAndTime(latestRiskCall.started_at)}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Emotional breakdown */}
+                  {latestEmotional && (
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="bg-background rounded-xl p-3">
+                        <p className="text-xs text-muted-foreground font-mono mb-1">Emotion</p>
+                        <p className="text-sm font-medium text-foreground capitalize">
+                          {latestEmotional.primary_emotion}
+                          {latestEmotional.confidence ? (
+                            <span className="text-muted-foreground font-normal text-xs ml-1">
+                              ({Math.round(latestEmotional.confidence * 100)}%)
+                            </span>
+                          ) : null}
+                        </p>
+                      </div>
+                      <div className="bg-background rounded-xl p-3">
+                        <p className="text-xs text-muted-foreground font-mono mb-1">Sentiment</p>
+                        <p className="text-sm font-medium text-foreground capitalize">{latestEmotional.sentiment}</p>
+                      </div>
+                      <div className="bg-background rounded-xl p-3">
+                        <p className="text-xs text-muted-foreground font-mono mb-1">Loneliness</p>
+                        <p className={`text-sm font-medium capitalize ${
+                          latestEmotional.loneliness_indicator === "severe" ? "text-destructive" :
+                          latestEmotional.loneliness_indicator === "moderate" ? "text-chart-4" :
+                          latestEmotional.loneliness_indicator === "mild" ? "text-chart-3" :
+                          "text-chart-1"
+                        }`}>
+                          {latestEmotional.loneliness_indicator || "None"}
+                        </p>
+                      </div>
+                      <div className="bg-background rounded-xl p-3">
+                        <p className="text-xs text-muted-foreground font-mono mb-1">Cognitive</p>
+                        <p className={`text-sm font-medium ${
+                          latestEmotional.cognitive_flags?.length > 0 ? "text-chart-4" : "text-chart-1"
+                        }`}>
+                          {latestEmotional.cognitive_flags?.length > 0
+                            ? latestEmotional.cognitive_flags.join(", ")
+                            : "Normal"}
+                        </p>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Cues */}
+                  {latestEmotional?.cues && latestEmotional.cues.length > 0 && (
+                    <div>
+                      <p className="text-xs text-muted-foreground font-mono mb-2">Observed cues</p>
+                      <div className="flex flex-wrap gap-1.5">
+                        {latestEmotional.cues.map((cue, i) => (
+                          <span key={i} className="px-2 py-1 text-xs rounded-full bg-secondary text-foreground">
+                            {cue}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Risk score history (last 5 calls) */}
+                  {callsWithRisk.length > 1 && (
+                    <div>
+                      <p className="text-xs text-muted-foreground font-mono mb-2">Recent risk scores</p>
+                      <div className="flex items-end gap-1 h-12">
+                        {callsWithRisk.slice(0, 7).reverse().map((c, i) => {
+                          const score = c.risk_score ?? 0
+                          const height = Math.max(score, 4)
+                          return (
+                            <div key={c.id} className="flex-1 flex flex-col items-center gap-0.5">
+                              <div
+                                className={`w-full rounded-t transition-all ${
+                                  score >= 76 ? "bg-destructive" :
+                                  score >= 51 ? "bg-chart-4" :
+                                  score >= 26 ? "bg-chart-3" :
+                                  "bg-chart-1"
+                                }`}
+                                style={{ height: `${height}%` }}
+                                title={`${formatDate(c.started_at)}: ${score}`}
+                              />
+                            </div>
+                          )
+                        })}
+                      </div>
+                      <div className="flex justify-between mt-1">
+                        <span className="text-[10px] text-muted-foreground">Older</span>
+                        <span className="text-[10px] text-muted-foreground">Latest</span>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="text-center py-6">
+                  <Brain className="w-8 h-8 text-muted-foreground mx-auto mb-2" />
+                  <p className="text-sm text-muted-foreground">
+                    Risk assessment will appear after the first call
+                  </p>
                 </div>
               )}
             </div>

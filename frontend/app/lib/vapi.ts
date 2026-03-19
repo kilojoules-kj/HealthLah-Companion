@@ -1,4 +1,5 @@
 import type { Patient } from "@/app/types"
+import { buildLanguageOverrides, getLanguageConfig } from "@/app/lib/language-config"
 
 const VAPI_API_KEY = process.env.VAPI_API_KEY!
 const VAPI_BASE_URL = "https://api.vapi.ai"
@@ -34,6 +35,10 @@ export async function initiateCall(patient: Patient): Promise<{ callId: string }
   }
   
   const number = toE164(patient.phone)
+  const lang = patient.preferred_language || "English"
+  const langOverrides = buildLanguageOverrides(lang)
+  const langConfig = getLanguageConfig(lang)
+
   const response = await fetch(`${VAPI_BASE_URL}/call`, {
     method: "POST",
     headers: {
@@ -48,6 +53,9 @@ export async function initiateCall(patient: Patient): Promise<{ callId: string }
         name: patient.name,
       },
       assistantOverrides: {
+        transcriber: langOverrides.transcriber,
+        voice: langOverrides.voice,
+        firstMessage: langOverrides.firstMessage,
         variableValues: {
           patient_name: patient.name,
           patient_age: patient.age,
@@ -56,7 +64,8 @@ export async function initiateCall(patient: Patient): Promise<{ callId: string }
           family_members: JSON.stringify(patient.family_members),
           medications: JSON.stringify(patient.medications),
           personality_notes: patient.personality_notes,
-          preferred_language: patient.preferred_language || "English",
+          preferred_language: lang,
+          language_instruction: langConfig.systemPromptLanguageInstruction,
           conditions: patient.conditions?.join(", ") || "",
         },
       },
@@ -88,6 +97,10 @@ export async function initiateOutboundCall(
   const name = options?.name?.trim() || "Guest"
   const variableValues = options?.variableValues ?? {}
   const number = toE164(phoneNumber.trim())
+  const outboundLang = variableValues.preferred_language ?? "English"
+  const outboundLangOverrides = buildLanguageOverrides(outboundLang)
+  const outboundLangConfig = getLanguageConfig(outboundLang)
+
   const response = await fetch(`${VAPI_BASE_URL}/call`, {
     method: "POST",
     headers: {
@@ -102,6 +115,9 @@ export async function initiateOutboundCall(
         name,
       },
       assistantOverrides: {
+        transcriber: outboundLangOverrides.transcriber,
+        voice: outboundLangOverrides.voice,
+        firstMessage: outboundLangOverrides.firstMessage,
         variableValues: {
           patient_name: name,
           patient_age: variableValues.patient_age ?? "",
@@ -110,7 +126,8 @@ export async function initiateOutboundCall(
           family_members: variableValues.family_members ?? "{}",
           medications: variableValues.medications ?? "[]",
           personality_notes: variableValues.personality_notes ?? "",
-          preferred_language: variableValues.preferred_language ?? "English",
+          preferred_language: outboundLang,
+          language_instruction: outboundLangConfig.systemPromptLanguageInstruction,
           conditions: variableValues.conditions ?? "",
           ...variableValues,
         },
