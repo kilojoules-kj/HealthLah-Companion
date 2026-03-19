@@ -69,9 +69,86 @@ patients — not the other way around.
 
 ## 🚀 Quick Start
 
+### Prerequisites
+
+- Python 3.10+
+- Node.js 18+ (for the caregiver dashboard frontend)
+- A MERaLiON API key (optional — falls back to demo mode without one)
+
+### 1. Clone the repository
+
 ```bash
 git clone https://github.com/kilojoules-kj/HealthLah-Companion.git
-cd healthlah-companion
+cd HealthLah-Companion
+```
+
+### 2. Configure environment variables
+
+```bash
+cp .env.example .env
+```
+
+Edit `.env` and fill in your credentials:
+
+```env
+# MERaLiON AudioLLM API key (leave blank to run in demo mode)
+MERALION_API_KEY=your_key_here
+
+# Supabase (for caregiver dashboard persistence)
+SUPABASE_URL=https://your-project.supabase.co
+SUPABASE_KEY=your_anon_key_here
+```
+
+> **Demo mode**: If `MERALION_API_KEY` is not set, the app runs with scripted
+> responses so you can explore the UI without an API key.
+
+### 3. Install Python dependencies
+
+```bash
 pip install -r requirements.txt
+```
+
+### 4. Start the backend
+
+```bash
 python main.py
-# Open http://localhost:8000
+```
+
+Open **http://localhost:8000** in your browser to access the voice check-in UI.
+
+### 5. (Optional) Start the caregiver dashboard
+
+In a separate terminal:
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+Open **http://localhost:3000** to view the caregiver dashboard with patient
+summaries, call history, and alert management.
+
+### 6. Run your first check-in
+
+1. Navigate to **http://localhost:8000**
+2. Select a patient (e.g. `patient_001` — Mr. Tan, pre-loaded in `data/patients.json`)
+3. Click **Start Call**
+4. Speak into your microphone — HealthLah will respond in the patient's preferred language
+5. View the AI-generated summary and caregiver alert (if triggered) in the dashboard
+
+---
+
+### Patient data
+
+Sample patients are stored in `data/patients.json`. Each entry includes:
+
+| Field | Description |
+|---|---|
+| `preferred_language` | `english`, `mandarin`, `malay`, `tamil` |
+| `conditions` | Chronic conditions (diabetes, hypertension, etc.) |
+| `medications` | Medication list with dosage and schedule |
+| `call_schedule` | Preferred daily check-in time (24-hour, e.g. `"09:00"`) |
+| `emergency_contact` | Name, phone, and relation of caregiver |
+
+---
