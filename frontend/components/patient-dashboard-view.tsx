@@ -100,12 +100,12 @@ function deriveTopicsThisMonth(calls: CallLog[], notes: Memory[]): { name: strin
   const now = new Date()
   const thisMonthStart = new Date(now.getFullYear(), now.getMonth(), 1)
   const monthCalls = calls.filter((c) => new Date(c.started_at) >= thisMonthStart)
-  const monthHealth Notes = notes.filter((m) => new Date(m.created_at) >= thisMonthStart)
+  const monthHealthNotes = notes.filter((m) => new Date(m.created_at) >= thisMonthStart)
   const topicCount: Record<string, number> = {}
   const knownTopics = ["Family", "Health Notes", "Health", "Health", "Hobbies", "Stories", "Daily life"]
   knownTopics.forEach((t) => (topicCount[t] = 0))
   const lower = (s: string) => s.toLowerCase()
-  monthHealth Notes.forEach((m) => {
+  monthHealthNotes.forEach((m) => {
     const cat = (m.category || "").trim()
     if (!cat) return
     const match = knownTopics.find((t) => lower(cat).includes(lower(t)) || lower(t).includes(lower(cat)))
@@ -153,7 +153,7 @@ function moodFromScore(score: number): "happy" | "neutral" | "sad" {
   return "sad"
 }
 
-export function PatientDashboardView({ patient, calls, notes, onBack, onRefresh }: PatientDashboardViewProps) {
+export function PatientDashboardView({ patient, calls = [], notes = [], onBack, onRefresh }: PatientDashboardViewProps) {
   const [callFilter, setCallFilter] = useState<"week" | "all">("week")
   const [testCallOpen, setTestCallOpen] = useState(false)
   const [phoneCallLoading, setPhoneCallLoading] = useState(false)
@@ -551,7 +551,7 @@ export function PatientDashboardView({ patient, calls, notes, onBack, onRefresh 
               ) : (
                 <div className="space-y-3">
                   {displayTopics.map((topic, i) => (
-                    <div key={topic.name} className="flex items-center gap-2">
+                    <div key={`${topic.name}-${i}`} className="flex items-center gap-2">
                       <span className="text-sm text-foreground w-20 font-mono shrink-0">{topic.name}</span>
                       <div className="flex-1 h-2 bg-background rounded-full overflow-hidden">
                         <div

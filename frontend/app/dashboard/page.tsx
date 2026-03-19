@@ -92,7 +92,7 @@ function DashboardContent() {
     <PatientDashboardView
       patient={patient}
       calls={calls}
-      memories={memories}
+      notes={memories}
       onRefresh={onRefresh}
     />
   )

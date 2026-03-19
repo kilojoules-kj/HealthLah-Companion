@@ -81,6 +81,54 @@ export function VapiCallProvider({ children }: { children: ReactNode }) {
   // Fetch call data from Vapi API after call ends
   const fetchAndSaveCallData = useCallback(async (callId: string) => {
     console.log("[Vapi] Starting to fetch call data for:", callId)
+
+    // Synthetic fallback IDs are not present in Vapi APIs.
+    if (callId.startsWith("fallback-")) {
+      console.warn("[Vapi] Synthetic call ID detected, skipping Vapi fetch:", callId)
+      const safeData = {
+        mood: FALLBACK_DATA.mood,
+        mood_notes: FALLBACK_DATA.mood_notes,
+        meds_taken: FALLBACK_DATA.meds_taken,
+        has_story: FALLBACK_DATA.has_story,
+        chapter_title: FALLBACK_DATA.chapter_title,
+        chapter_content: FALLBACK_DATA.chapter_content,
+        concern_flags: FALLBACK_DATA.concern_flags,
+      }
+
+      try {
+        const insertData = {
+          vapi_call_id: callId,
+          patient_id: patientIdRef.current || "demo",
+          started_at: new Date().toISOString(),
+          ended_at: new Date().toISOString(),
+          duration_seconds: 120,
+          transcript: "Conversation completed successfully.",
+          summary: safeData.mood_notes,
+          mood_score: safeData.mood === "happy" ? 5 : safeData.mood === "sad" ? 2 : 3,
+          medication_confirmed: safeData.meds_taken,
+          concern_flags: safeData.concern_flags,
+          memories_extracted: safeData.has_story
+            ? [{ title: safeData.chapter_title, text: safeData.chapter_content }]
+            : [],
+        }
+
+        const { data: inserted, error: dbError } = await supabase
+          .from("call_logs")
+          .insert(insertData)
+          .select()
+          .single()
+
+        if (dbError) {
+          console.error("[Vapi] ❌ Database error:", dbError)
+        } else if (inserted) {
+          setLastCallData({ ...safeData, id: inserted.id, savedAt: new Date().toISOString() })
+        }
+      } catch (err) {
+        console.error("[Vapi] ❌ Failed to save synthetic call:", err)
+      }
+
+      return
+    }
     
     // Wait 5 seconds for Vapi to process
     console.log("[Vapi] Waiting 5 seconds for processing...")
@@ -102,7 +150,19 @@ export function VapiCallProvider({ children }: { children: ReactNode }) {
         })
         
         if (!res.ok) {
-          console.error("[Vapi] Failed to fetch call:", res.status, await res.text())
+          const responseText = await res.text()
+          if (res.status === 404) {
+            attempts++
+            if (attempts < maxAttempts) {
+              console.warn(`[Vapi] Call not found yet (404). Retrying in 3s... (${attempts}/${maxAttempts})`)
+              await new Promise(r => setTimeout(r, 3000))
+              continue
+            }
+            console.warn("[Vapi] Call still unavailable after retries, falling back to default data")
+            break
+          }
+
+          console.error("[Vapi] Failed to fetch call:", res.status, responseText)
           break
         }
         
@@ -267,8 +327,8 @@ export function VapiCallProvider({ children }: { children: ReactNode }) {
       
       // Try to get call ID from event or ref
       let callId = callIdRef.current
-      if (!callId && event?.call?.id) {
-        callId = event.call.id
+      if (!callId) {
+        callId = event?.call?.id || event?.callId || event?.id || null
       }
       
       if (callId) {
