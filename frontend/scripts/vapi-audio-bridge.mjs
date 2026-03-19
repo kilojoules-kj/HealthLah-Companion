@@ -73,6 +73,8 @@ writeBridgeLog("info", "bridge-init", {
   meralionModel,
 })
 
+let resolvedControlUrl = null
+
 async function resolveListenUrl() {
   // Backward-compatible static template mode.
   if (vapiListenUrlTemplate && vapiListenUrlTemplate.includes("{callId}")) {
@@ -109,6 +111,18 @@ async function resolveListenUrl() {
       call?.monitor?.listenURL ||
       call?.listenUrl ||
       null
+
+    // Also resolve the controlUrl for say/speak actions
+    const controlUrl =
+      call?.monitor?.controlUrl ||
+      call?.monitor?.controlURL ||
+      call?.controlUrl ||
+      null
+
+    if (typeof controlUrl === "string" && controlUrl.startsWith("http")) {
+      resolvedControlUrl = controlUrl
+      writeBridgeLog("info", "control-url-resolved", { attempt, controlUrl })
+    }
 
     if (typeof listenUrl === "string" && listenUrl.startsWith("ws")) {
       writeBridgeLog("info", "listen-url-resolved", { attempt, via: "call.monitor.listenUrl" })
@@ -261,7 +275,16 @@ async function inferWithMeralion(wavBuffer) {
 async function sayToCall(text) {
   if (!text || !text.trim()) return
 
-  const res = await fetch(`https://api.vapi.ai/call/${callId}/control`, {
+  // Use the controlUrl from call.monitor (resolved during listenUrl lookup).
+  // The control endpoint lives on the call's regional host, NOT on api.vapi.ai.
+  const controlUrl = resolvedControlUrl
+  if (!controlUrl) {
+    writeBridgeLog("warn", "say-skipped", { reason: "no controlUrl resolved" })
+    console.warn(`${LOG_PREFIX} Cannot say — no controlUrl resolved from call monitor`)
+    return
+  }
+
+  const res = await fetch(controlUrl, {
     method: "POST",
     headers: {
       Authorization: `Bearer ${vapiApiKey}`,
@@ -269,7 +292,8 @@ async function sayToCall(text) {
     },
     body: JSON.stringify({
       type: "say",
-      text,
+      content: text,
+      endCallAfterSpoken: false,
     }),
   })
 
