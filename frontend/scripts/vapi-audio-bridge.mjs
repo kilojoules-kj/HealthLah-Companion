@@ -322,14 +322,16 @@ async function flushBufferedAudio() {
     console.log(`${LOG_PREFIX} MERaLiON transcript:`, modelResult.transcript || "(none)")
     console.log(`${LOG_PREFIX} MERaLiON language:`, modelResult.language || "unknown")
     console.log(`${LOG_PREFIX} MERaLiON mood:`, modelResult.mood || "unknown")
-    console.log(`${LOG_PREFIX} MERaLiON response_text:`, modelResult.response_text || "(none)")
     writeBridgeLog("info", "meralion-output", {
       transcript: modelResult.transcript || "",
       language: modelResult.language || "unknown",
       mood: modelResult.mood || "unknown",
-      response_text: modelResult.response_text || "",
     })
-    await sayToCall(modelResult.response_text || "I heard you. Thank you for sharing.")
+    // NOTE: The bridge is listen-only for emotional analysis / risk engine.
+    // The conversation is handled by VAPI + MERaLiON via /api/llm.
+    // We do NOT call sayToCall() — that would create a feedback loop where
+    // the bridge hears the assistant's own audio, generates a response,
+    // injects it back, which generates more audio, etc.
   } catch (err) {
     console.error(`${LOG_PREFIX} inference/control failed`, err)
     writeBridgeLog("error", "inference-control-failed", {
