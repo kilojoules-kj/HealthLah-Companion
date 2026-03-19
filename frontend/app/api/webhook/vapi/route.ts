@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from "next/server"
 import { updateCallLog, createMemory, getCallLogByVapiCallId, createCallLog } from "@/app/lib/supabase"
 import { getCallDetails } from "@/app/lib/vapi"
+import { startAudioBridgeForCall, stopAudioBridgeForCall } from "@/app/lib/audio-bridge"
+
+export const runtime = "nodejs"
 
 // VAPI webhook handler - captures call data and saves to database
 export async function POST(req: NextRequest) {
@@ -18,9 +21,25 @@ export async function POST(req: NextRequest) {
       case "call-ended":
       case "end-of-call-report":
         await handleCallEnded(message)
+        if (message.call?.id) {
+          const stopResult = stopAudioBridgeForCall(message.call.id)
+          if (stopResult.stopped) {
+            console.log("[VAPI Webhook] Stopped audio bridge for call:", message.call.id)
+          } else {
+            console.log("[VAPI Webhook] Audio bridge stop skipped:", stopResult.reason)
+          }
+        }
         break
       case "call-started":
         console.log("[VAPI Webhook] Call started:", message.call?.id)
+        if (message.call?.id) {
+          const startResult = startAudioBridgeForCall(message.call.id)
+          if (startResult.started) {
+            console.log("[VAPI Webhook] Started audio bridge for call:", message.call.id, "pid:", startResult.pid)
+          } else {
+            console.log("[VAPI Webhook] Audio bridge start skipped:", startResult.reason)
+          }
+        }
         break
       default:
         console.log("[VAPI Webhook] Unhandled type:", message.type)
