@@ -525,10 +525,27 @@ export function VapiCallProvider({ children }: { children: ReactNode }) {
       setError("VAPI not initialized")
       return
     }
+
+    // Pre-warm AudioContext inside the user gesture to avoid "play() can only
+    // be initiated by a user gesture" errors. The VAPI SDK creates its own
+    // AudioContext internally, but some browsers block it if it isn't created
+    // synchronously within a click handler.
+    try {
+      const AudioCtx = window.AudioContext || (window as any).webkitAudioContext
+      if (AudioCtx) {
+        const ctx = new AudioCtx()
+        if (ctx.state === "suspended") await ctx.resume()
+        // Close immediately — we only needed to unlock audio playback.
+        ctx.close().catch(() => {})
+      }
+    } catch {
+      // Non-critical; proceed anyway.
+    }
+
     // Store patient ID for database saves (use 'demo' as fallback for test calls without ID)
     patientIdRef.current = hasId(patient) ? patient.id : 'demo'
-    console.log("[Vapi] 🚀 Starting call for patient:", patientIdRef.current, patient.name)
-    
+    console.log("[Vapi] Starting call for patient:", patientIdRef.current, patient.name)
+
     setError(null)
     setIsConnecting(true)
     callIdRef.current = null // Reset call ID

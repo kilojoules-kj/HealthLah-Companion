@@ -140,14 +140,26 @@ function formatDuration(seconds: number) {
   return `${m} min`
 }
 
-/** Format phone for display e.g. +19375983675 → (937) 598-3675 */
+/** Format phone for display — Singapore style (+65) xxxx xxxx */
 function formatPhoneDisplay(phone: string) {
   const digits = phone.replace(/\D/g, "")
-  if (digits.length === 11 && digits.startsWith("1")) {
-    return `(${digits.slice(1, 4)}) ${digits.slice(4, 7)}-${digits.slice(7)}`
+  // Singapore: 65 + 8 digits
+  if (digits.length === 10 && digits.startsWith("65")) {
+    return `(+65) ${digits.slice(2, 6)} ${digits.slice(6)}`
   }
-  if (digits.length === 10) {
-    return `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}`
+  if (digits.length === 8) {
+    return `(+65) ${digits.slice(0, 4)} ${digits.slice(4)}`
+  }
+  // With country code prefix
+  if (digits.length === 11 && digits.startsWith("65")) {
+    return `(+65) ${digits.slice(3, 7)} ${digits.slice(7)}`
+  }
+  // Fallback: just show with +65 prefix if it looks like SG
+  if (phone.includes("+65")) {
+    const local = digits.startsWith("65") ? digits.slice(2) : digits
+    if (local.length === 8) {
+      return `(+65) ${local.slice(0, 4)} ${local.slice(4)}`
+    }
   }
   return phone
 }
@@ -164,8 +176,10 @@ export function PatientDashboardView({ patient, calls = [], notes = [], onBack, 
   const { startCall, endCall, isActive, isConnecting, error } = useVapi()
 
   const startBrowserCall = () => {
-    setCallDialogOpen(false)
+    // Start call BEFORE closing dialog — vapi.start() must run in the
+    // synchronous user-gesture call stack or the browser blocks audio play().
     startCall(patient)
+    setCallDialogOpen(false)
   }
 
   const initials = patient.name
