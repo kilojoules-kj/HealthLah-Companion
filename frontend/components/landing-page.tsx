@@ -66,7 +66,7 @@ export function LandingPage() {
                         <div className="absolute top-0 right-0 w-64 h-64 bg-primary/5 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2" />
 
                         <span className="sage-pill text-xs font-mono mb-4 inline-block relative">
-          AI-POWERED HEALTH COMPANION FOR SINGAPORE&apos;S ELDERLY
+          AI-POWERED HEALTH COMPANION FOR SINGAPORE
         </span>
 
                         <h1 className="text-3xl font-bold tracking-tight text-foreground font-heading md:text-4xl lg:text-5xl leading-tight relative">
@@ -76,9 +76,10 @@ export function LandingPage() {
                         </h1>
 
                         <p className="mt-6 text-muted-foreground text-lg leading-relaxed max-w-xl">
-                            HealthLah is the daily health check-in your elderly loved ones deserve.
-                            A warm, multilingual AI voice that monitors their conditions,
-                            reminds them about medications, and alerts you when something&apos;s off.
+                            HealthLah is the daily health companion for patients with chronic conditions,
+                            their caregivers, and anyone who wants to stay on top of their health.
+                            A warm, multilingual AI voice that monitors conditions,
+                            reminds about medications, and alerts caregivers when something&apos;s off.
                         </p>
 
                         <div className="mt-8 flex flex-wrap gap-3">
@@ -177,12 +178,12 @@ export function LandingPage() {
               <span className="block text-primary mt-2">needs a daily companion.</span>
             </h2>
             <p className="mt-6 text-muted-foreground text-lg leading-relaxed">
-              1.8 million Singaporeans live with chronic conditions like diabetes, hypertension, and kidney disease.
-              Many are elderly, multilingual, and managing complex medication schedules alone.
+              1.8 million Singaporeans live with chronic conditions like diabetes, hypertension, and kidney disease —
+              many managing complex medication schedules alone, across generations and languages.
             </p>
             <p className="mt-4 text-muted-foreground">
-              HealthLah bridges the gap between clinic visits with daily AI-powered check-ins
-              in their preferred language. Powered by MERaLiON AudioLLM.
+              HealthLah is for patients, caregivers, and families who want daily visibility into health between clinic visits.
+              Powered by MERaLiON AudioLLM.
             </p>
           </motion.div>
 
@@ -326,8 +327,8 @@ export function LandingPage() {
                 <span className="block text-primary mt-2">It&apos;s healthcare that cares.</span>
               </h2>
               <p className="mt-6 text-muted-foreground leading-relaxed">
-                Built for Singapore&apos;s multilingual elderly population.
-                Every call is an opportunity to catch health issues early and keep families informed.
+                Built for Singapore&apos;s patients, caregivers, and families across all ages.
+                Every call is an opportunity to catch health issues early and keep loved ones informed.
               </p>
             </motion.div>
             <motion.div
@@ -451,7 +452,7 @@ export function LandingPage() {
                   &ldquo;Every morning she calls me, ask about my blood sugar, remind me take medicine.
                   Like having a kaki who really cares about my health.&rdquo;
                 </p>
-                <p className="text-xs text-primary mt-2 font-medium">— Mr. Tan, 67</p>
+                <p className="text-xs text-primary mt-2 font-medium">— Puan Rohani, 62</p>
               </div>
             </motion.div>
           </div>
