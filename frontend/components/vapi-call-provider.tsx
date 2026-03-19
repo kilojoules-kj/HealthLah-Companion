@@ -80,11 +80,51 @@ const FALLBACK_DATA = {
 export function VapiCallProvider({ children }: { children: ReactNode }) {
   const vapiRef = useRef<Vapi | null>(null)
   const callIdRef = useRef<string | null>(null)
+  const bridgeCallIdRef = useRef<string | null>(null)
+  const bridgeLogCursorRef = useRef(0)
   const patientIdRef = useRef<string | null>(null)
   const [isActive, setIsActive] = useState(false)
   const [isConnecting, setIsConnecting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [lastCallData, setLastCallData] = useState<any | null>(null)
+
+  const startBridge = useCallback(async (callId: string) => {
+    if (!callId) return
+    try {
+      const res = await fetch("/api/bridge/start", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ callId }),
+      })
+      const payload = await res.json().catch(() => ({}))
+      if (res.ok && payload?.started) {
+        console.log("[MERaLiON][Browser] bridge started for call:", callId)
+      } else {
+        console.warn("[MERaLiON][Browser] bridge start response:", payload)
+      }
+    } catch (e) {
+      console.error("[MERaLiON][Browser] bridge start failed:", e)
+    }
+  }, [])
+
+  const stopBridge = useCallback(async (callId: string) => {
+    if (!callId) return
+    try {
+      const res = await fetch("/api/bridge/stop", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ callId }),
+      })
+      const payload = await res.json().catch(() => ({}))
+      if (res.ok && payload?.stopped) {
+        console.log("[MERaLiON][Browser] bridge stopped for call:", callId)
+      } else {
+        console.warn("[MERaLiON][Browser] bridge stop response:", payload)
+      }
+    } catch (e) {
+      console.error("[MERaLiON][Browser] bridge stop failed:", e)
+    }
+  }, [])
 
   // Fetch call data from Vapi API after call ends
   const fetchAndSaveCallData = useCallback(async (callId: string) => {
@@ -323,6 +363,11 @@ export function VapiCallProvider({ children }: { children: ReactNode }) {
     const onStart = (event: any) => {
       console.log("[Vapi] ✅ Call started event:", event)
       storeCallId(event)
+      const callId = event?.call?.id || event?.callId || event?.id || callIdRef.current
+      if (callId) {
+        bridgeCallIdRef.current = callId
+        void startBridge(callId)
+      }
       setIsConnecting(false)
       setIsActive(true)
       setError(null)
@@ -340,6 +385,8 @@ export function VapiCallProvider({ children }: { children: ReactNode }) {
       }
       
       if (callId) {
+        bridgeCallIdRef.current = callId
+        void stopBridge(callId)
         console.log("[Vapi] Initiating data fetch for call:", callId)
         fetchAndSaveCallData(callId)
       } else {
@@ -383,7 +430,79 @@ export function VapiCallProvider({ children }: { children: ReactNode }) {
       vapi.removeListener("call-end", onEnd)
       vapi.removeListener("error", onError as () => void)
     }
-  }, [fetchAndSaveCallData])
+  }, [fetchAndSaveCallData, startBridge, stopBridge])
+
+  useEffect(() => {
+    if (!isActive) {
+      bridgeLogCursorRef.current = 0
+      bridgeCallIdRef.current = null
+      return
+    }
+
+    const interval = window.setInterval(async () => {
+      let callId = callIdRef.current || bridgeCallIdRef.current
+
+      // Fallback for cases where the SDK event does not expose callId on client.
+      if (!callId) {
+        try {
+          const latestRes = await fetch("/api/bridge/latest")
+          if (latestRes.ok) {
+            const latest = await latestRes.json()
+            if (latest?.callId) {
+              callId = latest.callId
+              bridgeCallIdRef.current = latest.callId
+              console.log("[MERaLiON][Browser] using bridge callId:", latest.callId)
+            }
+          }
+        } catch {
+          // Best-effort fallback, ignore if unavailable.
+        }
+      }
+
+      if (!callId) {
+        console.log("[MERaLiON][Browser] waiting for bridge callId...")
+        return
+      }
+
+      try {
+        const res = await fetch(
+          `/api/bridge/logs?callId=${encodeURIComponent(callId)}&since=${bridgeLogCursorRef.current}`
+        )
+        if (!res.ok) {
+          console.warn("[MERaLiON][Browser] log polling failed:", res.status)
+          return
+        }
+
+        const payload = await res.json()
+        const entries = Array.isArray(payload.entries) ? payload.entries : []
+
+        for (const entry of entries) {
+          const event = entry?.event
+          const data = entry?.payload ?? {}
+          if (event === "meralion-output") {
+            console.log("[MERaLiON][Browser] transcript:", data.transcript || "")
+            console.log("[MERaLiON][Browser] language:", data.language || "unknown")
+            console.log("[MERaLiON][Browser] mood:", data.mood || "unknown")
+            console.log("[MERaLiON][Browser] response_text:", data.response_text || "")
+          } else if (event === "ws-open") {
+            console.log("[MERaLiON][Browser] bridge websocket connected")
+          } else if (event === "non-audio-message") {
+            console.log("[MERaLiON][Browser] non-audio ws message:", data.type || "unknown")
+          } else if (event === "inference-control-failed") {
+            console.error("[MERaLiON][Browser] bridge error:", data.error || "unknown")
+          }
+        }
+
+        if (typeof payload.nextSince === "number") {
+          bridgeLogCursorRef.current = payload.nextSince
+        }
+      } catch {
+        console.warn("[MERaLiON][Browser] transient polling error")
+      }
+    }, 1500)
+
+    return () => window.clearInterval(interval)
+  }, [isActive])
 
   const startCall = useCallback(async (patient: Patient | PatientLike) => {
     if (!VAPI_PUBLIC_KEY || !VAPI_ASSISTANT_ID) {
@@ -414,7 +533,9 @@ export function VapiCallProvider({ children }: { children: ReactNode }) {
       const returnedCallId = (call as any)?.id || (call as any)?.callId
       if (returnedCallId) {
         callIdRef.current = returnedCallId
+        bridgeCallIdRef.current = returnedCallId
         console.log("[Vapi] ✅ Call started with ID:", callIdRef.current)
+        void startBridge(returnedCallId)
       }
     } catch (e) {
       console.error("[Vapi] ❌ Start error:", e)
@@ -422,17 +543,22 @@ export function VapiCallProvider({ children }: { children: ReactNode }) {
       setIsConnecting(false)
       patientIdRef.current = null
     }
-  }, [])
+  }, [startBridge])
 
   const endCall = useCallback(async () => {
     const vapi = vapiRef.current
+    const callId = callIdRef.current || bridgeCallIdRef.current
+    if (callId) {
+      void stopBridge(callId)
+    }
     if (vapi) {
       console.log("[Vapi] 👋 Stopping call...")
       await vapi.stop()
     }
     setIsActive(false)
     setIsConnecting(false)
-  }, [])
+    bridgeLogCursorRef.current = 0
+  }, [stopBridge])
 
   const value: VapiContextValue = {
     isActive,
