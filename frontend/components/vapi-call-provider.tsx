@@ -550,7 +550,7 @@ export function VapiCallProvider({ children }: { children: ReactNode }) {
     setIsConnecting(true)
     callIdRef.current = null // Reset call ID
     const lang = (patient as Patient).preferred_language ?? "English"
-    const langOverrides = buildLanguageOverrides(lang)
+    const langOverrides = buildLanguageOverrides(lang, patient.name)
 
     try {
       const call = await vapi.start(VAPI_ASSISTANT_ID, {
