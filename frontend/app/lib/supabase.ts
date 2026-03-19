@@ -87,6 +87,12 @@ export async function getMemoriesByPatientId(patientId: string): Promise<Memory[
     return data ?? []
 }
 
+export async function getAllPatients(): Promise<Patient[]> {
+    const { data, error } = await supabaseAdmin.from("patients").select("*")
+    if (error) throw error
+    return data ?? []
+}
+
 export async function getRecentCallLogs(limit: number = 5): Promise<CallLog[]> {
     const { data, error } = await supabaseAdmin
         .from("call_logs")
