@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
 import { updateCallLog, createMemory, getCallLogByVapiCallId, createCallLog } from "@/app/lib/supabase"
-import { getCallDetails } from "@/app/lib/vapi"
 
 // VAPI webhook handler - captures call data and saves to database
 export async function POST(req: NextRequest) {
@@ -41,17 +40,23 @@ async function handleCallEnded(message: any) {
   }
 
   const vapiCallId = call.id
+
+  // VAPI sends transcript/summary/analysis on message, not on call
+  const transcript = message.transcript || message.artifact?.transcript || ""
+  const summary = message.analysis?.summary || message.summary || ""
+  const duration = call.durationSeconds || 0
+
   console.log("[VAPI Webhook] Processing call end:", vapiCallId)
   console.log("[VAPI Webhook] Call data:", {
-    duration: call.durationSeconds,
-    hasTranscript: !!call.transcript,
-    hasSummary: !!call.summary,
-    hasArtifact: !!call.artifact,
+    duration,
+    hasTranscript: !!transcript,
+    hasSummary: !!summary,
+    hasAnalysis: !!message.analysis,
   })
 
   // Try to find existing call log
   let existingLog = await getCallLogByVapiCallId(vapiCallId)
-  
+
   // If no log exists, create one
   if (!existingLog) {
     console.log("[VAPI Webhook] Creating new call log")
@@ -59,7 +64,7 @@ async function handleCallEnded(message: any) {
       await createCallLog({
         patient_id: null, // Will be matched when call is registered
         vapi_call_id: vapiCallId,
-        started_at: new Date(Date.now() - (call.durationSeconds || 0) * 1000).toISOString(),
+        started_at: new Date(Date.now() - duration * 1000).toISOString(),
       })
       existingLog = await getCallLogByVapiCallId(vapiCallId)
     } catch (e) {
@@ -73,11 +78,6 @@ async function handleCallEnded(message: any) {
     return
   }
 
-  // Extract data from the call
-  const transcript = call.transcript || ""
-  const summary = call.summary || call.analysis?.summary || ""
-  const duration = call.durationSeconds || 0
-
   // Try to extract mood and other structured data
   let mood = "neutral"
   let medsTaken = false
@@ -85,23 +85,18 @@ async function handleCallEnded(message: any) {
   let storyTitle = ""
   let storyContent = ""
 
-  // Check structured outputs if available
-  const outputs = call.artifact?.structuredOutputs || call.structuredOutputs
-  if (outputs) {
-    for (const entry of Object.values(outputs) as any[]) {
-      const result = entry?.result
-      if (result) {
-        if (result.mood) mood = result.mood
-        if (result.meds_taken !== undefined) medsTaken = result.meds_taken
-        if (result.has_story !== undefined) hasStory = result.has_story
-        if (result.chapter_title) storyTitle = result.chapter_title
-        if (result.chapter_content) storyContent = result.chapter_content
-      }
-    }
+  // VAPI structured data lives in message.analysis.structuredData
+  const structuredData = message.analysis?.structuredData
+  if (structuredData) {
+    if (structuredData.mood) mood = structuredData.mood
+    if (structuredData.meds_taken !== undefined) medsTaken = structuredData.meds_taken
+    if (structuredData.has_story !== undefined) hasStory = structuredData.has_story
+    if (structuredData.chapter_title) storyTitle = structuredData.chapter_title
+    if (structuredData.chapter_content) storyContent = structuredData.chapter_content
   }
 
-  // Fallback: detect mood from transcript
-  if (!mood && transcript) {
+  // Fallback: detect mood from transcript keywords
+  if (mood === "neutral" && transcript) {
     const t = transcript.toLowerCase()
     if (t.includes("happy") || t.includes("good") || t.includes("great")) mood = "happy"
     else if (t.includes("sad") || t.includes("lonely")) mood = "sad"
