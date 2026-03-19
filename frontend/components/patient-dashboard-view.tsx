@@ -203,7 +203,8 @@ export function PatientDashboardView({ patient, calls = [], notes = [], onBack, 
 
   const alerts = calls.filter((c) => c.concern_flags?.length > 0)
   const latestAlert = alerts[0]
-  const latestMemory = notes[0]
+  // Use the latest memory that has actual content; fall back to latest call summary
+  const latestMemory = notes.find((m) => m.note_text?.trim()) ?? null
 
   const familyMembers =
     patient.family_members && typeof patient.family_members === "object"
@@ -585,48 +586,59 @@ export function PatientDashboardView({ patient, calls = [], notes = [], onBack, 
               )}
             </div>
 
-            {/* In today's review - from latest note or fallback */}
-            {
-              <div className="paper-card p-6 bg-gradient-to-br from-primary/5 via-secondary/30 to-background border border-primary/10">
-                <div className="flex items-center gap-2 mb-3">
-                  <span className="text-xs font-semibold tracking-wider text-primary uppercase font-mono flex items-center gap-1.5">
-                    <Sparkles className="w-3.5 h-3.5" />
-                    In today's review
-                  </span>
-                  <span className="text-xs text-muted-foreground">
-                    · {latestMemory ? formatStoryDate(latestMemory.created_at) : FALLBACK.storyOfTheWeek.date}
-                  </span>
-                </div>
-                {latestMemory ? (
-                  <>
-                    <h3 className="text-lg font-semibold text-foreground font-heading mb-3">
-                      {latestMemory.category || "A note"}
-                    </h3>
-                    <blockquote className="text-foreground italic mb-4 leading-relaxed border-l-2 border-primary/30 pl-4">
-                      &ldquo;{latestMemory.note_text}&rdquo;
-                    </blockquote>
+            {/* In today's review - from latest note, latest call summary, or fallback */}
+            {(() => {
+              // Pick best content: memory with text > call with summary > fallback
+              const latestCallWithSummary = calls.find((c) => c.summary?.trim())
+              const reviewTitle = latestMemory
+                ? (latestMemory.category || "Health Note")
+                : latestCallWithSummary
+                  ? "Daily Health Check-in"
+                  : FALLBACK.storyOfTheWeek.category
+              const reviewText = latestMemory
+                ? latestMemory.note_text
+                : latestCallWithSummary
+                  ? latestCallWithSummary.summary
+                  : FALLBACK.storyOfTheWeek.text
+              const reviewDate = latestMemory
+                ? formatStoryDate(latestMemory.created_at)
+                : latestCallWithSummary
+                  ? formatStoryDate(latestCallWithSummary.started_at)
+                  : FALLBACK.storyOfTheWeek.date
+              const hasRealData = !!(latestMemory || latestCallWithSummary)
+
+              return (
+                <div className="paper-card p-6 bg-gradient-to-br from-primary/5 via-secondary/30 to-background border border-primary/10">
+                  <div className="flex items-center gap-2 mb-3">
+                    <span className="text-xs font-semibold tracking-wider text-primary uppercase font-mono flex items-center gap-1.5">
+                      <Sparkles className="w-3.5 h-3.5" />
+                      In today's review
+                    </span>
+                    <span className="text-xs text-muted-foreground">
+                      · {reviewDate}
+                    </span>
+                  </div>
+                  <h3 className="text-lg font-semibold text-foreground font-heading mb-3">
+                    {reviewTitle}
+                  </h3>
+                  <blockquote className="text-foreground italic mb-4 leading-relaxed border-l-2 border-primary/30 pl-4">
+                    &ldquo;{reviewText}&rdquo;
+                  </blockquote>
+                  {hasRealData ? (
                     <div className="flex gap-2">
                       <Button variant="outline" size="sm" className="border-border">
                         <Share2 className="w-4 h-4 mr-2" />
                         Share with family
                       </Button>
                     </div>
-                  </>
-                ) : (
-                  <>
-                    <h3 className="text-lg font-semibold text-foreground font-heading mb-3">
-                      {FALLBACK.storyOfTheWeek.category}
-                    </h3>
-                    <blockquote className="text-foreground italic mb-4 leading-relaxed border-l-2 border-primary/30 pl-4">
-                      &ldquo;{FALLBACK.storyOfTheWeek.text}&rdquo;
-                    </blockquote>
+                  ) : (
                     <p className="text-sm text-muted-foreground">
                       Health notes captured from calls will appear here. Start a call to capture notes.
                     </p>
-                  </>
-                )}
-              </div>
-            }
+                  )}
+                </div>
+              )
+            })()}
 
             {/* Health Schedule - from patient.medications with fallback */}
             <div className="paper-card p-6">
