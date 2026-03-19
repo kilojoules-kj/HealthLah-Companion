@@ -294,11 +294,23 @@ export function VapiCallProvider({ children }: { children: ReactNode }) {
         console.warn("[Vapi] ⚠️ No error but no data returned from insert")
       }
       
+      // Trigger risk analysis asynchronously
+      if (inserted?.id) {
+        fetch("/api/risk/analyze", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ callId: inserted.id }),
+        })
+          .then((r) => r.json())
+          .then((r) => console.log("[Vapi] Risk analysis:", r.assessment?.risk_level, "score:", r.assessment?.risk_score))
+          .catch((e) => console.error("[Vapi] Risk analysis failed:", e))
+      }
+
       // Also save memory if there's a story
-      console.log("[Vapi] 💭 Checking if memory should be saved...", { 
-        has_story: safeData.has_story, 
-        has_content: !!safeData.chapter_content, 
-        inserted_id: inserted?.id 
+      console.log("[Vapi] 💭 Checking if memory should be saved...", {
+        has_story: safeData.has_story,
+        has_content: !!safeData.chapter_content,
+        inserted_id: inserted?.id
       })
       
       if (safeData.has_story && safeData.chapter_content && inserted?.id) {

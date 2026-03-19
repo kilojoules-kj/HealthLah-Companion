@@ -53,7 +53,23 @@ export interface CallLog {
   medication_confirmed: boolean
   memories_extracted: any[]
   concern_flags: string[]
+  /** Overall risk level: low, moderate, high, critical */
+  risk_level?: string
+  /** Numeric risk score 0-100 */
+  risk_score?: number
+  /** Detailed emotional analysis from MERaLiON */
+  emotional_analysis?: EmotionalAnalysis
   created_at: string
+}
+
+export interface EmotionalAnalysis {
+  primary_emotion: string
+  confidence: number
+  secondary_emotions: string[]
+  sentiment: string
+  cues: string[]
+  loneliness_indicator: string
+  cognitive_flags: string[]
 }
 
 export interface Memory {
